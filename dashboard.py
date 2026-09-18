@@ -126,6 +126,7 @@ NOMBRES_ESTADO = {
     "EN_GESTION": "En gestión",
     "RESUELTO": "Resuelto",
     "CERRADO": "Cerrado",
+    "IGNORADO": "Ignorado por filtro",
     "ERROR_IA": "Error de IA",
     "ERROR_ENVIO_CLIENTE": "Error al notificar cliente",
     "ERROR_RESPUESTA_CLIENTE": "Error al generar respuesta",
@@ -1493,6 +1494,11 @@ for col, default in {
     "validacion_ofensivo": "PENDIENTE",
     "validacion_amenaza": "PENDIENTE",
     "comentario_validacion_guardrail": "",
+    "es_relevante_bancario": 1,
+    "tipo_pertinencia": "RELEVANTE",
+    "motivo_pertinencia": "",
+    "origen_filtro_pertinencia": "",
+    "fecha_filtro_pertinencia": "",
 }.items():
     if col not in casos.columns:
         casos[col] = default
@@ -1504,17 +1510,22 @@ casos["Correo cliente"] = casos["remitente"].apply(extraer_email)
 casos["Estado visible"] = casos["estado"].apply(nombre_estado)
 casos["Correo ejecutivo"] = casos["responsable_asignado"].apply(correo_responsable)
 
-# Control de acceso por responsable. Desde este punto, todas las tablas,
-# métricas, gráficos, búsquedas e historiales trabajan solo con el alcance
-# autorizado para la sesión actual.
-casos_globales = casos.copy()
+# El filtro de pertinencia conserva trazabilidad de correos descartados, pero
+# éstos NO deben contaminar la bandeja operativa ni las métricas de casos.
+mascara_ignorados = (
+    casos["estado"].fillna("").eq("IGNORADO")
+    | casos["es_relevante_bancario"].fillna(1).astype(int).eq(0)
+)
+correos_ignorados_globales = casos[mascara_ignorados].copy()
+casos_operativos_globales = casos[~mascara_ignorados].copy()
+
+# Control de acceso por responsable. Desde este punto, las tablas, métricas,
+# gráficos e historiales operativos excluyen los correos ignorados.
+casos_globales = casos_operativos_globales.copy()
 casos = filtrar_casos_por_usuario(casos_globales)
 
-if casos.empty:
-    if usuario_sesion["rol"] == "ADMIN":
-        st.info("No existen casos para mostrar.")
-    else:
-        st.info("No tienes casos asignados actualmente.")
+if casos.empty and usuario_sesion["rol"] != "ADMIN":
+    st.info("No tienes casos asignados actualmente.")
     st.stop()
 
 # Métricas principales, con términos cotidianos.
@@ -1637,6 +1648,52 @@ with tab_casos:
             st.caption("Información adicional (ábrela solo si la necesitas)")
             mostrar_informacion_opcional(caso)
 
+    # Solo el administrador puede revisar la trazabilidad de correos descartados.
+    if usuario_sesion["rol"] == "ADMIN":
+        st.divider()
+        with st.expander(
+            f"Correos ignorados por filtro de pertinencia ({len(correos_ignorados_globales)})",
+            expanded=False,
+        ):
+            st.caption(
+                "Estos mensajes no generaron ticket, respuesta al remitente ni asignación a un ejecutivo. "
+                "Se conservan únicamente para trazabilidad y revisión del filtro."
+            )
+            if correos_ignorados_globales.empty:
+                st.info("Todavía no hay correos descartados por el filtro de pertinencia.")
+            else:
+                ignorados = correos_ignorados_globales.copy()
+                buscar_ignorado = st.text_input(
+                    "Buscar correo ignorado",
+                    placeholder="Remitente, asunto, tipo o motivo",
+                    key="buscar_ignorados_pertinencia",
+                )
+                if buscar_ignorado.strip():
+                    patron = re.escape(buscar_ignorado.strip())
+                    mascara = (
+                        ignorados["remitente"].fillna("").astype(str).str.contains(patron, case=False, regex=True)
+                        | ignorados["asunto"].fillna("").astype(str).str.contains(patron, case=False, regex=True)
+                        | ignorados["tipo_pertinencia"].fillna("").astype(str).str.contains(patron, case=False, regex=True)
+                        | ignorados["motivo_pertinencia"].fillna("").astype(str).str.contains(patron, case=False, regex=True)
+                    )
+                    ignorados = ignorados[mascara]
+
+                tabla_ignorados = ignorados.rename(columns={
+                    "fecha_recepcion": "Fecha",
+                    "remitente": "Remitente",
+                    "asunto": "Asunto",
+                    "tipo_pertinencia": "Tipo",
+                    "motivo_pertinencia": "Motivo",
+                    "origen_filtro_pertinencia": "Filtro",
+                })
+                cols_ignorados = ["Fecha", "Remitente", "Asunto", "Tipo", "Motivo", "Filtro"]
+                st.dataframe(
+                    tabla_ignorados[cols_ignorados],
+                    use_container_width=True,
+                    hide_index=True,
+                    height=min(300, 75 + max(1, len(tabla_ignorados)) * 34),
+                )
+
     st.divider()
     with st.expander(f"Historial de casos cerrados ({len(casos_cerrados)})", expanded=False):
         if casos_cerrados.empty:
@@ -1697,17 +1754,107 @@ with tab_resumen:
     st.subheader(titulo_resumen)
     st.markdown(f'<div class="section-note">{ayuda_resumen}</div>', unsafe_allow_html=True)
 
+    # KPI interactivos: además de informar, permiten explorar los casos que componen cada indicador.
+    if "kpi_resumen_seleccion" not in st.session_state:
+        st.session_state["kpi_resumen_seleccion"] = None
+
+    etiqueta_total = "Total de casos" if usuario_sesion["rol"] == "ADMIN" else "Mis casos"
+    ayuda_total = (
+        "Todos los casos registrados en la base."
+        if usuario_sesion["rol"] == "ADMIN"
+        else "Todos los casos actualmente asignados a tu cuenta, incluidos los cerrados."
+    )
+
+    def tarjeta_kpi_interactiva(columna, etiqueta, valor, ayuda, clave):
+        with columna:
+            with st.container(border=True):
+                st.caption(etiqueta)
+                st.markdown(f"## {valor}")
+                st.caption(ayuda)
+                if st.button(
+                    "Ver historial",
+                    key=f"abrir_kpi_{clave}",
+                    use_container_width=True,
+                    help=f"Mostrar los casos incluidos en: {etiqueta}",
+                ):
+                    st.session_state["kpi_resumen_seleccion"] = clave
+
     k1, k2, k3, k4 = st.columns(4)
-    with k1:
-        etiqueta_total = "Total de casos" if usuario_sesion["rol"] == "ADMIN" else "Mis casos"
-        ayuda_total = "Todos los casos registrados en la base." if usuario_sesion["rol"] == "ADMIN" else "Todos los casos actualmente asignados a tu cuenta, incluidos los cerrados."
-        kpi_card(etiqueta_total, len(casos), ayuda_total)
-    with k2:
-        kpi_card("Pendientes", len(abiertos), "Casos que aún requieren gestión.")
-    with k3:
-        kpi_card("En gestión", len(en_gestion), "Casos que actualmente están siendo trabajados.")
-    with k4:
-        kpi_card("Fuera de plazo", len(vencidos), "Casos abiertos que superaron su tiempo objetivo.")
+    tarjeta_kpi_interactiva(k1, etiqueta_total, len(casos), ayuda_total, "total")
+    tarjeta_kpi_interactiva(k2, "Pendientes", len(abiertos), "Casos que aún requieren gestión.", "pendientes")
+    tarjeta_kpi_interactiva(k3, "En gestión", len(en_gestion), "Casos que actualmente están siendo trabajados.", "gestion")
+    tarjeta_kpi_interactiva(k4, "Fuera de plazo", len(vencidos), "Casos abiertos que superaron su tiempo objetivo.", "vencidos")
+
+    # Panel contextual que se abre al pulsar cualquiera de los KPI anteriores.
+    seleccion_kpi = st.session_state.get("kpi_resumen_seleccion")
+    if seleccion_kpi:
+        detalle_map = {
+            "total": (etiqueta_total, casos.copy()),
+            "pendientes": ("Pendientes", abiertos.copy()),
+            "gestion": ("En gestión", en_gestion.copy()),
+            "vencidos": ("Fuera de plazo", vencidos.copy()),
+        }
+        titulo_detalle, detalle_kpi = detalle_map.get(seleccion_kpi, ("Detalle", casos.iloc[0:0].copy()))
+
+        st.markdown(f"### Historial · {titulo_detalle}")
+        cab1, cab2 = st.columns([5, 1])
+        with cab1:
+            st.caption(
+                f"{len(detalle_kpi)} caso(s) componen este indicador. "
+                "Selecciona un ticket para revisar sus antecedentes."
+            )
+        with cab2:
+            if st.button("Cerrar detalle", key="cerrar_detalle_kpi", use_container_width=True):
+                st.session_state["kpi_resumen_seleccion"] = None
+                st.rerun()
+
+        if detalle_kpi.empty:
+            st.info("No hay casos para este indicador.")
+        else:
+            detalle_tabla = detalle_kpi.copy().rename(columns={
+                "ticket_id": "Ticket",
+                "nombre_cliente": "Cliente",
+                "categoria": "Categoría",
+                "prioridad": "Prioridad",
+                "responsable_asignado": "Ejecutivo",
+                "Estado visible": "Estado",
+                "fecha_recepcion": "Recepción",
+                "fecha_cierre": "Cierre",
+            })
+            cols_detalle = [
+                "Ticket", "Cliente", "Correo cliente", "Categoría", "Prioridad",
+                "Ejecutivo", "Estado", "SLA", "Recepción", "Cierre"
+            ]
+            cols_detalle = [c for c in cols_detalle if c in detalle_tabla.columns]
+            st.dataframe(
+                detalle_tabla[cols_detalle],
+                use_container_width=True,
+                hide_index=True,
+                height=min(360, 75 + max(1, len(detalle_tabla)) * 35),
+            )
+
+            opciones_detalle = {
+                f"{row.get('ticket_id') or 'SIN-TICKET'} · "
+                f"{row.get('nombre_cliente') or 'Cliente'} · "
+                f"{row.get('categoria') or 'Sin categoría'} · "
+                f"{nombre_estado(row.get('estado'))}": int(row["id"])
+                for _, row in detalle_kpi.sort_values("id", ascending=False).iterrows()
+            }
+            seleccion_ticket = st.selectbox(
+                "Abrir caso del historial",
+                list(opciones_detalle.keys()),
+                key=f"detalle_kpi_ticket_{seleccion_kpi}",
+            )
+            caso_detalle = obtener_caso_autorizado(opciones_detalle[seleccion_ticket])
+            if caso_detalle:
+                resumen_caso_compacto(caso_detalle)
+                with st.expander("Ver antecedentes del caso", expanded=False):
+                    st.write(f"**Asunto:** {caso_detalle.get('asunto') or 'Sin asunto'}")
+                    st.write(f"**Mensaje:** {caso_detalle.get('cuerpo_original') or 'Sin contenido almacenado.'}")
+                    st.write(f"**Gestión registrada:** {caso_detalle.get('nota_ejecutivo') or 'Sin nota registrada'}")
+                    st.write(f"**Comentario de evaluación:** {caso_detalle.get('comentario_feedback') or 'Sin comentario'}")
+
+        st.divider()
 
     st.markdown("### Distribución de la carga")
     graf1, graf2 = st.columns([1.15, 0.85], gap="large")
