@@ -1554,10 +1554,17 @@ with tab_casos:
     casos_activos = casos[casos["estado"] != "CERRADO"].copy()
     casos_cerrados = casos[casos["estado"] == "CERRADO"].copy()
 
-    # Prioridad visual: críticos/altos primero; luego los más recientes.
-    ranking_prioridad = {"CRITICA": 0, "ALTA": 1, "MEDIA": 2, "BAJA": 3}
-    casos_activos["_rank_prioridad"] = casos_activos["prioridad"].map(ranking_prioridad).fillna(9)
-    casos_activos = casos_activos.sort_values(["_rank_prioridad", "id"], ascending=[True, False])
+    # Orden cronológico de la bandeja: los correos más recientes arriba.
+    # Si algún registro antiguo no tiene fecha_recepcion, queda al final.
+    casos_activos["_fecha_orden"] = pd.to_datetime(
+        casos_activos["fecha_recepcion"],
+        errors="coerce",
+    )
+    casos_activos = casos_activos.sort_values(
+        ["_fecha_orden", "id"],
+        ascending=[False, False],
+        na_position="last",
+    )
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Casos activos", len(casos_activos), help="Casos que todavía requieren una acción o cierre administrativo.")
@@ -1595,7 +1602,15 @@ with tab_casos:
     if responsables_sel:
         filtrado = filtrado[filtrado["responsable_asignado"].isin(responsables_sel)]
 
+    # Mantener el mismo orden cronológico después de aplicar filtros.
+    filtrado = filtrado.sort_values(
+        ["_fecha_orden", "id"],
+        ascending=[False, False],
+        na_position="last",
+    )
+
     tabla = filtrado.copy().rename(columns={
+        "fecha_recepcion": "Fecha llegada",
         "ticket_id": "Ticket",
         "nombre_cliente": "Cliente",
         "categoria": "Categoría",
@@ -1603,7 +1618,27 @@ with tab_casos:
         "responsable_asignado": "Ejecutivo",
         "Estado visible": "Estado",
     })
-    columnas = ["Ticket", "Cliente", "Correo cliente", "Categoría", "Prioridad", "Ejecutivo", "Estado", "SLA"]
+
+    if "Fecha llegada" in tabla.columns:
+        fecha_mostrar = pd.to_datetime(
+            tabla["Fecha llegada"],
+            errors="coerce",
+        )
+        tabla["Fecha llegada"] = fecha_mostrar.dt.strftime(
+            "%d-%m-%Y %H:%M"
+        ).fillna("Sin fecha")
+
+    columnas = [
+        "Fecha llegada",
+        "Ticket",
+        "Cliente",
+        "Correo cliente",
+        "Categoría",
+        "Prioridad",
+        "Ejecutivo",
+        "Estado",
+        "SLA",
+    ]
     columnas = [c for c in columnas if c in tabla.columns]
     st.dataframe(
         tabla[columnas],
@@ -1611,6 +1646,7 @@ with tab_casos:
         hide_index=True,
         height=min(310, 75 + max(1, len(tabla)) * 34),
         column_config={
+            "Fecha llegada": st.column_config.TextColumn("Fecha llegada", width="medium"),
             "Ticket": st.column_config.TextColumn("Ticket", width="small"),
             "Cliente": st.column_config.TextColumn("Cliente", width="medium"),
             "Correo cliente": st.column_config.TextColumn("Correo", width="large"),
@@ -1705,6 +1741,16 @@ with tab_casos:
                 key="buscar_cerrados_v84",
             )
             hist = casos_cerrados.copy()
+            hist["_fecha_orden"] = pd.to_datetime(
+                hist["fecha_recepcion"],
+                errors="coerce",
+            )
+            hist = hist.sort_values(
+                ["_fecha_orden", "id"],
+                ascending=[False, False],
+                na_position="last",
+            )
+
             if buscar_cerrados.strip():
                 patron = re.escape(buscar_cerrados.strip())
                 hist = hist[
@@ -1716,10 +1762,33 @@ with tab_casos:
                 ]
 
             tabla_hist = hist.copy().rename(columns={
-                "ticket_id": "Ticket", "nombre_cliente": "Cliente", "categoria": "Categoría",
-                "responsable_asignado": "Ejecutivo", "fecha_cierre": "Fecha cierre",
+                "fecha_recepcion": "Fecha llegada",
+                "ticket_id": "Ticket",
+                "nombre_cliente": "Cliente",
+                "categoria": "Categoría",
+                "responsable_asignado": "Ejecutivo",
+                "fecha_cierre": "Fecha cierre",
             })
-            cols_hist = ["Ticket", "Cliente", "Correo cliente", "Categoría", "Ejecutivo", "Fecha cierre", "SLA"]
+
+            if "Fecha llegada" in tabla_hist.columns:
+                fecha_hist = pd.to_datetime(
+                    tabla_hist["Fecha llegada"],
+                    errors="coerce",
+                )
+                tabla_hist["Fecha llegada"] = fecha_hist.dt.strftime(
+                    "%d-%m-%Y %H:%M"
+                ).fillna("Sin fecha")
+
+            cols_hist = [
+                "Fecha llegada",
+                "Ticket",
+                "Cliente",
+                "Correo cliente",
+                "Categoría",
+                "Ejecutivo",
+                "Fecha cierre",
+                "SLA",
+            ]
             cols_hist = [c for c in cols_hist if c in tabla_hist.columns]
             st.dataframe(tabla_hist[cols_hist], use_container_width=True, hide_index=True, height=min(260, 75 + max(1, len(hist)) * 34))
 
