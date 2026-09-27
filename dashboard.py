@@ -1752,15 +1752,96 @@ if pagina == "Inicio":
             """,
             unsafe_allow_html=True,
         )
-        st.button(
-            "Abrir este caso en Bandeja y gestión",
-            type="primary",
-            key="inicio_abrir_siguiente",
-            on_click=ir_a_bandeja,
-            args=("Todos", int(caso_siguiente["id"])),
-        )
+        accion_sugerido, accion_elegir = st.columns([1, 1])
+        with accion_sugerido:
+            st.button(
+                "Abrir caso sugerido",
+                type="primary",
+                use_container_width=True,
+                key="inicio_abrir_siguiente",
+                on_click=ir_a_bandeja,
+                args=("Todos", int(caso_siguiente["id"])),
+            )
+        with accion_elegir:
+            if st.button(
+                "Elegir otro caso",
+                use_container_width=True,
+                key="inicio_toggle_selector_casos",
+            ):
+                st.session_state["inicio_mostrar_selector_casos"] = not st.session_state.get(
+                    "inicio_mostrar_selector_casos", False
+                )
+                st.rerun()
     else:
         st.success("No tienes casos pendientes en este momento.")
+
+    # Selector de trabajo: permite elegir cualquier caso activo dentro del
+    # alcance del usuario sin convertir Inicio en una segunda bandeja.
+    if st.session_state.get("inicio_mostrar_selector_casos", False):
+        st.markdown("### Elegir un caso para trabajar")
+        st.caption(
+            "Se muestran todos los casos disponibles para gestión dentro de tu alcance, "
+            "ordenados desde el más reciente al más antiguo."
+        )
+
+        casos_disponibles_inicio = casos[casos["estado"] != "CERRADO"].copy()
+        casos_disponibles_inicio = casos_disponibles_inicio.sort_values(
+            ["_fecha_recepcion_dt", "id"],
+            ascending=[False, False],
+            na_position="last",
+        )
+
+        if casos_disponibles_inicio.empty:
+            st.info("No hay casos disponibles para trabajar en este momento.")
+        else:
+            opciones_inicio = {}
+            for _, fila in casos_disponibles_inicio.iterrows():
+                etiqueta = (
+                    f"{fila.get('Fecha recepción') or 'Sin fecha'} · "
+                    f"{fila.get('ticket_id') or 'SIN-TICKET'} · "
+                    f"{fila.get('nombre_cliente') or 'Cliente sin nombre'} · "
+                    f"{fila.get('categoria') or 'Sin categoría'} · "
+                    f"{fila.get('prioridad') or 'Sin prioridad'} · "
+                    f"{fila.get('Estado visible') or nombre_estado(fila.get('estado'))}"
+                )
+                opciones_inicio[etiqueta] = int(fila["id"])
+
+            seleccion_inicio = st.selectbox(
+                f"Casos disponibles ({len(opciones_inicio)})",
+                list(opciones_inicio.keys()),
+                key="inicio_selector_caso_trabajo",
+                help="Puedes escribir dentro del selector para buscar por ticket, cliente, categoría o fecha.",
+            )
+
+            fila_seleccionada = casos_disponibles_inicio[
+                casos_disponibles_inicio["id"].astype(int) == opciones_inicio[seleccion_inicio]
+            ].iloc[0]
+
+            s1, s2, s3, s4, s5 = st.columns([1.1, 1.5, 1, 0.9, 1.1])
+            s1.metric("Ticket", fila_seleccionada.get("ticket_id") or f"ID {fila_seleccionada.get('id')}")
+            s2.metric("Cliente", fila_seleccionada.get("nombre_cliente") or "Sin nombre")
+            s3.metric("Categoría", fila_seleccionada.get("categoria") or "Sin categoría")
+            s4.metric("Prioridad", fila_seleccionada.get("prioridad") or "Sin prioridad")
+            s5.metric("Estado", fila_seleccionada.get("Estado visible") or nombre_estado(fila_seleccionada.get("estado")))
+
+            abrir_col, ocultar_col = st.columns([1, 1])
+            with abrir_col:
+                st.button(
+                    "Trabajar este caso",
+                    type="primary",
+                    use_container_width=True,
+                    key="inicio_abrir_caso_elegido",
+                    on_click=ir_a_bandeja,
+                    args=("Todos", int(fila_seleccionada["id"])),
+                )
+            with ocultar_col:
+                if st.button(
+                    "Ocultar selector",
+                    use_container_width=True,
+                    key="inicio_ocultar_selector_casos",
+                ):
+                    st.session_state["inicio_mostrar_selector_casos"] = False
+                    st.rerun()
 
     # --- 4. Visión de carga / actividad -----------------------------------
     c_actividad, c_carga = st.columns([1.25, 0.75], gap="large")
