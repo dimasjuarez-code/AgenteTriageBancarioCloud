@@ -332,6 +332,64 @@ st.markdown(
 )
 
 
+# Capa final de UX: oculta chrome de Streamlit y unifica acciones/controles.
+st.markdown(
+    """
+    <style>
+    #MainMenu, footer, [data-testid="stToolbar"], [data-testid="stDecoration"],
+    [data-testid="stHeaderActionElements"] {display:none !important;}
+    [data-testid="stHeader"] {height:0 !important; min-height:0 !important; background:transparent !important;}
+    .block-container {padding-top:.8rem !important;}
+    .app-topbar {padding:15px 20px !important; border-radius:16px !important; margin-bottom:16px !important;}
+    .app-topbar-title {font-size:1.32rem !important;}
+    .app-topbar-status {float:right; font-size:.78rem; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.18); padding:6px 10px; border-radius:999px;}
+    .stButton > button[kind="primary"], .stFormSubmitButton > button[kind="primary"] {
+        background:#2456A6 !important; border-color:#2456A6 !important; color:white !important;
+    }
+    .stButton > button[kind="primary"]:hover, .stFormSubmitButton > button[kind="primary"]:hover {
+        background:#173B7A !important; border-color:#173B7A !important;
+    }
+    .st-key-login_shell {
+        background:#FFFFFF; border:1px solid #DFE6F0; border-radius:18px; padding:28px 30px 24px 30px;
+        box-shadow:0 12px 34px rgba(23,59,122,.08);
+    }
+    .login-brand {
+        background:linear-gradient(100deg,#173B7A 0%,#2E56A6 100%); color:white; border-radius:14px;
+        padding:20px 22px; margin-bottom:20px;
+    }
+    .login-brand-title {font-size:1.35rem;font-weight:800;margin-bottom:4px;}
+    .login-brand-sub {font-size:.88rem;opacity:.86;}
+    .login-note {font-size:.78rem;color:#738099;text-align:center;margin-top:12px;}
+    [class*="st-key-kpi_nav_"] button {
+        white-space:pre-line !important; text-align:left !important; justify-content:flex-start !important;
+        min-height:118px !important; padding:16px 17px !important; border-radius:16px !important;
+        background:#FFFFFF !important; border:1px solid #DFE6F0 !important; color:#17233A !important;
+        box-shadow:0 4px 14px rgba(34,52,84,.045) !important; line-height:1.35 !important;
+    }
+    [class*="st-key-kpi_nav_"] button p {white-space:pre-line !important; text-align:left !important; width:100%;}
+    [class*="st-key-kpi_nav_"] button:hover {border-color:#9DB3DA !important; box-shadow:0 7px 18px rgba(34,52,84,.08) !important;}
+    [class*="st-key-kpi_nav_"] button:disabled {opacity:.55 !important;}
+    .priority-card {background:#FFFFFF;border:1px solid #DFE6F0;border-radius:16px;padding:17px 18px;margin:8px 0 12px 0;}
+    .priority-head {display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;}
+    .priority-ticket {font-size:1.12rem;font-weight:800;color:#17233A;}
+    .priority-client {font-size:.88rem;color:#738099;margin-top:2px;}
+    .tag {display:inline-block;border-radius:999px;padding:4px 9px;font-size:.74rem;font-weight:700;margin:0 5px 5px 0;}
+    .tag-blue {background:#EAF1FF;color:#2456A6}.tag-red {background:#FDECEC;color:#B42318}.tag-amber {background:#FFF3D6;color:#946200}.tag-purple {background:#F0EBFF;color:#6941C6}.tag-green {background:#E9F8F1;color:#087A52}
+    .age-text {font-size:.82rem;color:#667085;margin-top:9px;}
+    .ia-label, .human-label {font-weight:800;border-radius:10px;padding:9px 12px;margin:10px 0 8px 0;}
+    .ia-label {background:#EEF4FF;color:#2456A6;border-left:4px solid #3D6FE8;}
+    .human-label {background:#F2F8F5;color:#087A52;border-left:4px solid #16A36A;}
+    .compact-caption {font-size:.80rem;color:#738099;}
+    @media (max-width:900px) {
+        .st-key-login_shell {padding:20px 18px;}
+        [class*="st-key-kpi_nav_"] button {min-height:94px !important;}
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
 def kpi_card(label, value, help_text):
     st.markdown(
         f"""
@@ -343,6 +401,59 @@ def kpi_card(label, value, help_text):
         """,
         unsafe_allow_html=True,
     )
+
+
+def formatear_antiguedad(valor):
+    """Devuelve una antigüedad relativa legible a partir de una fecha/timestamp."""
+    try:
+        ts = pd.to_datetime(valor, errors="coerce")
+        if pd.isna(ts):
+            return "antigüedad no disponible"
+        now = pd.Timestamp.now(tz=ts.tz) if getattr(ts, "tz", None) is not None else pd.Timestamp.now()
+        delta = now - ts
+        segundos = max(0, int(delta.total_seconds()))
+        if segundos < 60:
+            return f"hace {segundos} s"
+        minutos = segundos // 60
+        if minutos < 60:
+            return f"hace {minutos} min"
+        horas = minutos // 60
+        if horas < 48:
+            return f"hace {horas} h"
+        dias = horas // 24
+        return f"hace {dias} días"
+    except Exception:
+        return "antigüedad no disponible"
+
+
+def formatear_duracion(minutos):
+    if minutos is None:
+        return "Sin datos"
+    try:
+        minutos = float(minutos)
+    except Exception:
+        return "Sin datos"
+    if minutos < 1:
+        return f"{max(1, round(minutos * 60))} s"
+    if minutos < 60:
+        return f"{minutos:.1f} min"
+    horas = minutos / 60
+    if horas < 48:
+        return f"{horas:.1f} h"
+    return f"{horas / 24:.1f} días"
+
+
+def kpi_navegable(label, value, help_text, foco, key, disabled=False):
+    """KPI de Inicio que también funciona como acceso directo a la bandeja."""
+    with st.container(key=f"kpi_nav_{key}"):
+        st.button(
+            f"{label}\n{value}\n{help_text}",
+            key=f"btn_kpi_nav_{key}",
+            use_container_width=True,
+            disabled=disabled,
+            on_click=ir_a_bandeja,
+            args=(foco,),
+        )
 
 
 def info_block(items):
@@ -1129,7 +1240,8 @@ def renderizar_accion_actual(caso, actual):
             ejecutivo_agente = caso.get("responsable_asignado") or "N/D"
             asunto = caso.get("asunto") or "Sin asunto"
 
-            with st.expander("Contexto para validar", expanded=False):
+            st.markdown('<div class="ia-label">Análisis de la IA</div>', unsafe_allow_html=True)
+            with st.expander("Ver análisis y contexto del agente", expanded=True):
                 cctx1, cctx2, cctx3 = st.columns([1.25, 1, 1], gap="medium")
                 with cctx1:
                     st.markdown(
@@ -1159,6 +1271,9 @@ def renderizar_accion_actual(caso, actual):
                     disabled=True,
                     key=f"mensaje_eval_v84_{caso['id']}",
                 )
+
+            st.markdown('<div class="human-label">Validación humana</div>', unsafe_allow_html=True)
+            st.caption("Confirma, corrige y documenta la decisión del ejecutivo. La IA propone; la persona valida.")
 
             nota_key = f"nota_eval_v84_{caso['id']}"
             comentario_key = f"comentario_eval_v84_{caso['id']}"
@@ -1419,41 +1534,55 @@ def usuario_actual():
 
 
 def autenticar_dashboard():
-    """Inicio de sesión simple para el prototipo, con credenciales en .env."""
+    """Inicio de sesión del prototipo, manteniendo credenciales en Secrets/.env."""
     if usuario_actual():
         return True
 
-    st.markdown("## Acceso al Centro de Gestión")
-    st.caption(
-        "Selecciona tu cuenta e ingresa la contraseña configurada para este prototipo. "
-        "Cada ejecutivo verá únicamente sus propios casos."
-    )
-
-    with st.form("login_dashboard", clear_on_submit=False):
-        cuenta = st.selectbox("Usuario", list(USUARIOS_DASHBOARD.keys()))
-        password = st.text_input("Contraseña", type="password")
-        ingresar = st.form_submit_button("Ingresar", type="primary", use_container_width=True)
-
-    if ingresar:
-        configuracion = USUARIOS_DASHBOARD[cuenta]
-        esperada = str(configuracion.get("password") or "")
-
-        if not esperada:
-            st.error(
-                "Esta cuenta todavía no tiene contraseña configurada en el archivo .env. "
-                "Configúrala y reinicia el dashboard."
+    espacio_izq, centro, espacio_der = st.columns([1, 1.15, 1])
+    with centro:
+        with st.container(key="login_shell"):
+            st.markdown(
+                """
+                <div class="login-brand">
+                    <div class="login-brand-title">Gestión Inteligente</div>
+                    <div class="login-brand-sub">Acceso al Centro de Gestión · Triaje, enrutamiento y revisión humana</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
-        elif password and hmac.compare_digest(password, esperada):
-            st.session_state["usuario_dashboard"] = {
-                "cuenta": cuenta,
-                "nombre": configuracion["nombre"],
-                "rol": configuracion["rol"],
-            }
-            logger.info("LOGIN_OK | usuario=%s | rol=%s", cuenta, configuracion["rol"])
-            st.rerun()
-        else:
-            logger.warning("LOGIN_FAIL | usuario=%s", cuenta)
-            st.error("Contraseña incorrecta.")
+            st.markdown("### Iniciar sesión")
+            st.caption("Selecciona tu cuenta e ingresa la contraseña asignada.")
+
+            with st.form("login_dashboard", clear_on_submit=False):
+                cuenta = st.selectbox("Usuario", list(USUARIOS_DASHBOARD.keys()))
+                password = st.text_input("Contraseña", type="password")
+                ingresar = st.form_submit_button("Ingresar", type="primary", use_container_width=True)
+
+            st.markdown(
+                '<div class="login-note">Acceso restringido a usuarios autorizados. Cada ejecutivo visualiza únicamente los casos dentro de su alcance.</div>',
+                unsafe_allow_html=True,
+            )
+
+            if ingresar:
+                configuracion = USUARIOS_DASHBOARD[cuenta]
+                esperada = str(configuracion.get("password") or "")
+
+                if not esperada:
+                    st.error(
+                        "Esta cuenta todavía no tiene contraseña configurada. "
+                        "Configúrala en Secrets/.env y reinicia el dashboard."
+                    )
+                elif password and hmac.compare_digest(password, esperada):
+                    st.session_state["usuario_dashboard"] = {
+                        "cuenta": cuenta,
+                        "nombre": configuracion["nombre"],
+                        "rol": configuracion["rol"],
+                    }
+                    logger.info("LOGIN_OK | usuario=%s | rol=%s", cuenta, configuracion["rol"])
+                    st.rerun()
+                else:
+                    logger.warning("LOGIN_FAIL | usuario=%s", cuenta)
+                    st.error("Contraseña incorrecta.")
 
     return False
 
@@ -1538,9 +1667,11 @@ with st.sidebar:
         cerrar_sesion_dashboard()
 
 vista_texto = "Vista global de todos los casos" if usuario_sesion["rol"] == "ADMIN" else "Vista personal · solo casos asignados"
+hora_actualizacion = datetime.now().strftime("%H:%M")
 st.markdown(
     f"""
     <div class="app-topbar">
+        <span class="app-topbar-status">● Operativo · actualizado {hora_actualizacion}</span>
         <div class="app-topbar-title">Asistente de Atención a Clientes</div>
         <div class="app-topbar-sub">Triaje, enrutamiento y revisión humana</div>
         <div class="app-topbar-user">{html.escape(usuario_sesion['nombre'])} · {vista_texto}</div>
@@ -1647,65 +1778,22 @@ if pagina == "Inicio":
     titulo_inicio = "Centro operativo" if usuario_sesion["rol"] == "ADMIN" else "Mi centro operativo"
     st.markdown(f"## {titulo_inicio}")
     st.markdown(
-        '<div class="section-note">Esta vista sirve para entender qué requiere atención y decidir dónde entrar. La gestión detallada se realiza en Bandeja y gestión.</div>',
+        '<div class="section-note">Resumen operacional de los casos activos y sus prioridades.</div>',
         unsafe_allow_html=True,
     )
 
-    # --- 1. Estado actual -------------------------------------------------
+    # --- 1. Estado actual: los KPI también funcionan como acceso directo ---
     h1, h2, h3, h4, h5 = st.columns(5)
     with h1:
-        kpi_card("Pendientes", len(abiertos), "Casos aún no cerrados.")
+        kpi_navegable("Pendientes", len(abiertos), "Casos aún no cerrados", "Todos", "pendientes")
     with h2:
-        kpi_card("Críticos", len(criticos), "Prioridad crítica y activos.")
+        kpi_navegable("Críticos", len(criticos), "Prioridad crítica", "Críticos", "criticos", disabled=len(criticos) == 0)
     with h3:
-        kpi_card("Fuera de plazo", len(vencidos), "Casos activos con SLA vencido.")
+        kpi_navegable("Fuera de plazo", len(vencidos), "SLA vencido", "Fuera de plazo", "vencidos", disabled=len(vencidos) == 0)
     with h4:
-        kpi_card("Revisión humana", len(revision_humana), "Casos que requieren validación HITL.")
+        kpi_navegable("Revisión humana", len(revision_humana), "Validación HITL", "Revisión humana", "hitl", disabled=len(revision_humana) == 0)
     with h5:
-        kpi_card("Guardrails", len(guardrails), "Casos con alertas de seguridad.")
-
-    # --- 2. Acciones rápidas: navegar, no gestionar aquí ------------------
-    st.markdown("### Accesos rápidos")
-    q1, q2, q3, q4, q5 = st.columns(5)
-    q1.button(
-        "Ver todos los pendientes",
-        use_container_width=True,
-        key="inicio_ir_pendientes",
-        on_click=ir_a_bandeja,
-        args=("Todos",),
-    )
-    q2.button(
-        f"Críticos ({len(criticos)})",
-        use_container_width=True,
-        key="inicio_ir_criticos",
-        on_click=ir_a_bandeja,
-        args=("Críticos",),
-        disabled=len(criticos) == 0,
-    )
-    q3.button(
-        f"Fuera de plazo ({len(vencidos)})",
-        use_container_width=True,
-        key="inicio_ir_vencidos",
-        on_click=ir_a_bandeja,
-        args=("Fuera de plazo",),
-        disabled=len(vencidos) == 0,
-    )
-    q4.button(
-        f"Revisión humana ({len(revision_humana)})",
-        use_container_width=True,
-        key="inicio_ir_hitl",
-        on_click=ir_a_bandeja,
-        args=("Revisión humana",),
-        disabled=len(revision_humana) == 0,
-    )
-    q5.button(
-        f"Guardrails ({len(guardrails)})",
-        use_container_width=True,
-        key="inicio_ir_guardrails",
-        on_click=ir_a_bandeja,
-        args=("Guardrails",),
-        disabled=len(guardrails) == 0,
-    )
+        kpi_navegable("Guardrails", len(guardrails), "Alertas de seguridad", "Guardrails", "guardrails", disabled=len(guardrails) == 0)
 
     # --- 3. Qué atender primero -------------------------------------------
     st.markdown("### Qué requiere atención ahora")
@@ -1740,14 +1828,29 @@ if pagina == "Inicio":
         fecha_siguiente = caso_siguiente.get("Fecha recepción") or "Sin fecha"
         categoria_siguiente = caso_siguiente.get("categoria") or "Sin categoría"
         prioridad_siguiente = caso_siguiente.get("prioridad") or "Sin prioridad"
+        antiguedad_siguiente = formatear_antiguedad(caso_siguiente.get("_fecha_recepcion_dt"))
+        prioridad_css = "tag-red" if prioridad_siguiente in {"CRITICA", "ALTA"} else "tag-amber"
+        extras = []
+        if caso_siguiente.get("SLA_TECNICO") == "VENCIDO":
+            extras.append('<span class="tag tag-red">SLA vencido</span>')
+        if int(caso_siguiente.get("requiere_revision_humana") or 0) == 1:
+            extras.append('<span class="tag tag-purple">Revisión humana</span>')
         st.markdown(
             f"""
-            <div class="case-summary-grid">
-                <div class="case-summary-item"><div class="case-summary-label">Caso sugerido</div><div class="case-summary-value">{html.escape(str(ticket_siguiente))}</div><div class="case-summary-sub">{html.escape(str(cliente_siguiente))}</div></div>
-                <div class="case-summary-item"><div class="case-summary-label">Recibido</div><div class="case-summary-value">{html.escape(str(fecha_siguiente))}</div></div>
-                <div class="case-summary-item"><div class="case-summary-label">Categoría</div><div class="case-summary-value">{html.escape(str(categoria_siguiente))}</div></div>
-                <div class="case-summary-item"><div class="case-summary-label">Prioridad</div><div class="case-summary-value">{html.escape(str(prioridad_siguiente))}</div></div>
-                <div class="case-summary-item"><div class="case-summary-label">Por qué aparece primero</div><div class="case-summary-sub">{html.escape(', '.join(motivos))}</div></div>
+            <div class="priority-card">
+                <div class="priority-head">
+                    <div>
+                        <div class="case-summary-label">Caso sugerido</div>
+                        <div class="priority-ticket">{html.escape(str(ticket_siguiente))}</div>
+                        <div class="priority-client">{html.escape(str(cliente_siguiente))}</div>
+                    </div>
+                    <div>
+                        <span class="tag tag-blue">{html.escape(str(categoria_siguiente))}</span>
+                        <span class="tag {prioridad_css}">{html.escape(str(prioridad_siguiente))}</span>
+                        {''.join(extras)}
+                    </div>
+                </div>
+                <div class="age-text"><b>{html.escape(antiguedad_siguiente)}</b> · {html.escape(str(fecha_siguiente))} · Motivo: {html.escape(', '.join(motivos))}</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -1881,7 +1984,17 @@ if pagina == "Inicio":
             if carga.empty:
                 st.info("No hay casos pendientes para distribuir.")
             else:
-                st.dataframe(carga, use_container_width=True, hide_index=True, height=min(350, 75 + len(carga) * 34))
+                carga = carga.sort_values("Pendientes", ascending=True)
+                fig_carga_inicio = px.bar(
+                    carga, x="Pendientes", y="Ejecutivo", orientation="h", text="Pendientes",
+                    title=None,
+                )
+                fig_carga_inicio.update_layout(
+                    height=max(230, 58 * len(carga)), margin=dict(l=8, r=18, t=10, b=20),
+                    xaxis_title="Casos pendientes", yaxis_title="", showlegend=False,
+                )
+                fig_carga_inicio.update_traces(textposition="outside", cliponaxis=False)
+                st.plotly_chart(fig_carga_inicio, use_container_width=True, config={"displayModeBar": False})
         else:
             st.markdown("### Mi situación")
             propios = abiertos.copy()
@@ -1890,11 +2003,6 @@ if pagina == "Inicio":
             st.metric("Nuevos", nuevos_propios, help="Casos asignados que aún no han iniciado gestión.")
             st.metric("En gestión", en_gestion_propios, help="Casos que ya estás trabajando.")
             st.metric("Fuera de plazo", len(vencidos), help="Casos propios con SLA vencido.")
-
-    st.info(
-        "Inicio no modifica casos. Para evaluar la IA, reasignar, responder, resolver, cerrar o reabrir tickets, usa Bandeja y gestión."
-    )
-
 
 # ============================================================
 # PÁGINA: BANDEJA Y GESTIÓN
@@ -1906,7 +2014,7 @@ elif pagina == "Bandeja y gestión":
 
     st.markdown("## Bandeja y gestión")
     st.markdown(
-        '<div class="section-note">Aquí se trabaja cada ticket: búsqueda, filtros, revisión HITL, reasignación, respuesta, resolución, cierre e historial.</div>',
+        '<div class="section-note">Selecciona un ticket y completa su gestión guiada.</div>',
         unsafe_allow_html=True,
     )
 
@@ -1949,104 +2057,99 @@ elif pagina == "Bandeja y gestión":
     m4.metric("Fuera de plazo", len(casos_activos[casos_activos["SLA_TECNICO"] == "VENCIDO"]), help="Casos activos que superaron el tiempo objetivo.")
 
     st.markdown("### Casos activos")
-    st.caption("Esta bandeja muestra solo los casos activos dentro de tu alcance. Los cerrados están en el historial inferior.")
+    st.caption("Selecciona un ticket a la izquierda. La gestión completa se realiza en el panel derecho.")
 
-    with st.expander("Buscar o filtrar casos activos", expanded=False):
-        filtro1, filtro2, filtro3, filtro4 = st.columns([1.5, 1, 1, 1])
-        texto_busqueda = filtro1.text_input("Buscar", placeholder="Ticket, cliente, correo o asunto", key="buscar_activos_v84")
-        estados_visibles = sorted(casos_activos["Estado visible"].dropna().unique().tolist())
-        categorias = sorted([x for x in casos_activos["categoria"].dropna().unique().tolist() if x])
-        responsables = sorted([x for x in casos_activos["responsable_asignado"].dropna().unique().tolist() if x])
-        estados_sel = filtro2.multiselect("Estado", estados_visibles, key="estado_activos_v84")
-        categorias_sel = filtro3.multiselect("Categoría", categorias, key="categoria_activos_v84")
-        responsables_sel = filtro4.multiselect("Ejecutivo", responsables, key="responsable_activos_v84")
+    lista_col, detalle_col = st.columns([0.82, 1.18], gap="large")
 
-    filtrado = casos_activos.copy()
-    if texto_busqueda.strip():
-        patron = re.escape(texto_busqueda.strip())
-        mascara = (
-            filtrado["ticket_id"].fillna("").astype(str).str.contains(patron, case=False, regex=True)
-            | filtrado["nombre_cliente"].fillna("").astype(str).str.contains(patron, case=False, regex=True)
-            | filtrado["Correo cliente"].fillna("").astype(str).str.contains(patron, case=False, regex=True)
-            | filtrado["asunto"].fillna("").astype(str).str.contains(patron, case=False, regex=True)
+    with lista_col:
+        with st.expander("Buscar o filtrar", expanded=False):
+            texto_busqueda = st.text_input("Buscar", placeholder="Ticket, cliente, correo o asunto", key="buscar_activos_v90")
+            f1, f2 = st.columns(2)
+            estados_visibles = sorted(casos_activos["Estado visible"].dropna().unique().tolist())
+            categorias = sorted([x for x in casos_activos["categoria"].dropna().unique().tolist() if x])
+            estados_sel = f1.multiselect("Estado", estados_visibles, key="estado_activos_v90")
+            categorias_sel = f2.multiselect("Categoría", categorias, key="categoria_activos_v90")
+            responsables_sel = []
+            if usuario_sesion["rol"] == "ADMIN":
+                responsables = sorted([x for x in casos_activos["responsable_asignado"].dropna().unique().tolist() if x])
+                responsables_sel = st.multiselect("Ejecutivo", responsables, key="responsable_activos_v90")
+
+        filtrado = casos_activos.copy()
+        if texto_busqueda.strip():
+            patron = re.escape(texto_busqueda.strip())
+            mascara = (
+                filtrado["ticket_id"].fillna("").astype(str).str.contains(patron, case=False, regex=True)
+                | filtrado["nombre_cliente"].fillna("").astype(str).str.contains(patron, case=False, regex=True)
+                | filtrado["Correo cliente"].fillna("").astype(str).str.contains(patron, case=False, regex=True)
+                | filtrado["asunto"].fillna("").astype(str).str.contains(patron, case=False, regex=True)
+            )
+            filtrado = filtrado[mascara]
+        if estados_sel:
+            filtrado = filtrado[filtrado["Estado visible"].isin(estados_sel)]
+        if categorias_sel:
+            filtrado = filtrado[filtrado["categoria"].isin(categorias_sel)]
+        if responsables_sel:
+            filtrado = filtrado[filtrado["responsable_asignado"].isin(responsables_sel)]
+
+        filtrado = filtrado.sort_values(
+            ["_fecha_recepcion_dt", "id"], ascending=[False, False], na_position="last"
         )
-        filtrado = filtrado[mascara]
-    if estados_sel:
-        filtrado = filtrado[filtrado["Estado visible"].isin(estados_sel)]
-    if categorias_sel:
-        filtrado = filtrado[filtrado["categoria"].isin(categorias_sel)]
-    if responsables_sel:
-        filtrado = filtrado[filtrado["responsable_asignado"].isin(responsables_sel)]
 
-    filtrado = filtrado.sort_values(
-        ["_fecha_recepcion_dt", "id"],
-        ascending=[False, False],
-        na_position="last",
-    )
+        if filtrado.empty:
+            st.info("No hay casos activos que coincidan con los filtros.")
+            caso = None
+        else:
+            tabla = filtrado.copy().rename(columns={
+                "ticket_id": "Ticket", "nombre_cliente": "Cliente", "categoria": "Categoría",
+                "prioridad": "Prioridad", "Estado visible": "Estado",
+            })
+            columnas = ["Fecha recepción", "Ticket", "Cliente", "Categoría", "Prioridad", "Estado"]
+            columnas = [c for c in columnas if c in tabla.columns]
+            st.dataframe(
+                tabla[columnas], use_container_width=True, hide_index=True,
+                height=min(330, 75 + max(1, len(tabla)) * 34),
+                column_config={
+                    "Fecha recepción": st.column_config.TextColumn("Fecha", width="medium"),
+                    "Ticket": st.column_config.TextColumn("Ticket", width="small"),
+                    "Cliente": st.column_config.TextColumn("Cliente", width="medium"),
+                    "Categoría": st.column_config.TextColumn("Categoría", width="small"),
+                    "Prioridad": st.column_config.TextColumn("Prioridad", width="small"),
+                    "Estado": st.column_config.TextColumn("Estado", width="medium"),
+                },
+            )
 
-    tabla = filtrado.copy().rename(columns={
-        "ticket_id": "Ticket",
-        "nombre_cliente": "Cliente",
-        "categoria": "Categoría",
-        "prioridad": "Prioridad",
-        "responsable_asignado": "Ejecutivo",
-        "Estado visible": "Estado",
-    })
-    columnas = ["Fecha recepción", "Ticket", "Cliente", "Correo cliente", "Categoría", "Prioridad", "Ejecutivo", "Estado", "SLA"]
-    columnas = [c for c in columnas if c in tabla.columns]
-    st.dataframe(
-        tabla[columnas],
-        use_container_width=True,
-        hide_index=True,
-        height=min(310, 75 + max(1, len(tabla)) * 34),
-        column_config={
-            "Fecha recepción": st.column_config.TextColumn("Fecha", width="medium"),
-            "Ticket": st.column_config.TextColumn("Ticket", width="small"),
-            "Cliente": st.column_config.TextColumn("Cliente", width="medium"),
-            "Correo cliente": st.column_config.TextColumn("Correo", width="large"),
-            "Categoría": st.column_config.TextColumn("Categoría", width="small"),
-            "Prioridad": st.column_config.TextColumn("Prioridad", width="small"),
-            "Ejecutivo": st.column_config.TextColumn("Ejecutivo", width="medium"),
-            "Estado": st.column_config.TextColumn("Estado", width="medium"),
-            "SLA": st.column_config.TextColumn("Plazo", width="small"),
-        },
-    )
+            opciones = {
+                f"{row.get('Fecha recepción') or 'Sin fecha'} · {row['ticket_id'] or 'SIN-TICKET'} · "
+                f"{row.get('nombre_cliente') or 'Cliente'} · {row.get('categoria') or 'Sin categoría'}": int(row["id"])
+                for _, row in filtrado.iterrows()
+            }
+            etiquetas_opciones = list(opciones.keys())
+            caso_solicitado_id = st.session_state.pop("_bandeja_caso_request", None)
+            indice_inicial = 0
+            if caso_solicitado_id is not None:
+                for i, etiqueta in enumerate(etiquetas_opciones):
+                    if opciones[etiqueta] == int(caso_solicitado_id):
+                        indice_inicial = i
+                        break
 
-    if filtrado.empty:
-        st.info("No hay casos activos que coincidan con los filtros seleccionados.")
-    else:
-        opciones = {
-            f"{row.get('Fecha recepción') or 'Sin fecha'} · {row['ticket_id'] or 'SIN-TICKET'} · {row.get('nombre_cliente') or 'Cliente sin nombre'} · "
-            f"{row.get('categoria') or 'Sin categoría'} · {row.get('responsable_asignado') or 'Sin ejecutivo'}": int(row["id"])
-            for _, row in filtrado.iterrows()
-        }
-        etiquetas_opciones = list(opciones.keys())
-        caso_solicitado_id = st.session_state.pop("_bandeja_caso_request", None)
-        indice_inicial = 0
-        if caso_solicitado_id is not None:
-            for i, etiqueta in enumerate(etiquetas_opciones):
-                if opciones[etiqueta] == int(caso_solicitado_id):
-                    indice_inicial = i
-                    break
+            seleccion = st.selectbox(
+                "Abrir caso", etiquetas_opciones, index=indice_inicial,
+                help="Selecciona un ticket para iniciar o continuar la gestión.",
+                key="abrir_activo_v90",
+            )
+            caso = obtener_caso_autorizado(opciones[seleccion])
 
-        seleccion = st.selectbox(
-            "Abrir caso activo",
-            etiquetas_opciones,
-            index=indice_inicial,
-            help="Selecciona un ticket para iniciar o continuar la gestión guiada.",
-            key="abrir_activo_v84",
-        )
-        caso = obtener_caso_autorizado(opciones[seleccion])
-
+    with detalle_col:
         if caso:
-            st.divider()
             ticket = caso.get("ticket_id") or str(caso.get("id"))
-            st.markdown(f'<div class="case-title">Caso {ticket}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="case-title">Caso {html.escape(str(ticket))}</div>', unsafe_allow_html=True)
             actual = mostrar_barra_gestion_compacta(caso)
             resumen_caso_compacto(caso)
             renderizar_accion_actual(caso, actual)
-            st.caption("Información adicional (ábrela solo si la necesitas)")
-            mostrar_informacion_opcional(caso)
+            with st.expander("Información adicional del caso", expanded=False):
+                mostrar_informacion_opcional(caso)
+        else:
+            st.info("Selecciona un caso activo para comenzar la gestión.")
 
     # Solo el administrador puede revisar la trazabilidad de correos descartados.
     if usuario_sesion["rol"] == "ADMIN":
@@ -2154,10 +2257,15 @@ elif pagina == "Métricas":
     st.subheader(titulo_resumen)
     st.markdown(f'<div class="section-note">{ayuda_resumen}</div>', unsafe_allow_html=True)
 
-    k1, k2, k3, k4 = st.columns(4)
+    cerrados_total = casos[casos["estado"] == "CERRADO"]
+    con_sla = casos[casos["SLA_TECNICO"].isin(["EN PLAZO", "POR VENCER", "VENCIDO", "CUMPLIDO"])]
+    cumplidos_sla = con_sla[con_sla["SLA_TECNICO"].isin(["EN PLAZO", "POR VENCER", "CUMPLIDO"])]
+    sla_pct = (len(cumplidos_sla) / len(con_sla) * 100) if len(con_sla) else 0
+
+    k1, k2, k3, k4, k5 = st.columns(5)
     with k1:
         etiqueta_total = "Total de casos" if usuario_sesion["rol"] == "ADMIN" else "Mis casos"
-        ayuda_total = "Todos los casos registrados en la base." if usuario_sesion["rol"] == "ADMIN" else "Todos los casos actualmente asignados a tu cuenta, incluidos los cerrados."
+        ayuda_total = "Todos los casos registrados en la base." if usuario_sesion["rol"] == "ADMIN" else "Casos asignados a tu cuenta, incluidos los cerrados."
         kpi_card(etiqueta_total, len(casos), ayuda_total)
     with k2:
         kpi_card("Pendientes", len(abiertos), "Casos que aún requieren gestión.")
@@ -2165,6 +2273,8 @@ elif pagina == "Métricas":
         kpi_card("En gestión", len(en_gestion), "Casos que actualmente están siendo trabajados.")
     with k4:
         kpi_card("Fuera de plazo", len(vencidos), "Casos abiertos que superaron su tiempo objetivo.")
+    with k5:
+        kpi_card("SLA cumplido", f"{sla_pct:.1f}%", f"{len(cumplidos_sla)} de {len(con_sla)} casos con SLA evaluable.")
 
     st.markdown("### Distribución de la carga")
     graf1, graf2 = st.columns([1.15, 0.85], gap="large")
@@ -2176,6 +2286,7 @@ elif pagina == "Métricas":
             .value_counts()
             .rename_axis("Categoría")
             .reset_index(name="Casos")
+            .sort_values("Casos", ascending=False)
         )
         fig_cat = px.bar(
             cat_df,
@@ -2198,31 +2309,34 @@ elif pagina == "Métricas":
 
     with graf2:
         resp_df = (
-            casos["responsable_asignado"]
+            abiertos["responsable_asignado"]
             .fillna("Sin responsable")
+            .replace("", "Sin responsable")
             .value_counts()
             .rename_axis("Ejecutivo")
-            .reset_index(name="Casos")
+            .reset_index(name="Activos")
+            .sort_values("Activos", ascending=True)
         )
-        fig_resp = go.Figure(
-            data=[
-                go.Pie(
-                    labels=resp_df["Ejecutivo"],
-                    values=resp_df["Casos"],
-                    hole=0.58,
-                    textinfo="label+value",
-                    hovertemplate="%{label}<br>%{value} casos<extra></extra>",
-                )
-            ]
-        )
-        fig_resp.update_layout(
-            title="Carga por ejecutivo",
-            height=330,
-            margin=dict(l=20, r=20, t=55, b=20),
-            legend_title_text="Ejecutivo",
-        )
-        st.plotly_chart(fig_resp, use_container_width=True, config={"displayModeBar": False})
-        st.caption("Permite comparar cuántos casos tiene asignados cada responsable.")
+        if resp_df.empty:
+            st.info("No hay carga activa pendiente.")
+        else:
+            vencidos_resp = (
+                vencidos["responsable_asignado"].fillna("Sin responsable").replace("", "Sin responsable")
+                .value_counts().to_dict()
+            )
+            resp_df["Vencidos"] = resp_df["Ejecutivo"].map(vencidos_resp).fillna(0).astype(int)
+            fig_resp = px.bar(
+                resp_df, x="Activos", y="Ejecutivo", orientation="h", text="Activos",
+                title="Carga activa por ejecutivo",
+                hover_data={"Vencidos": True, "Activos": True},
+            )
+            fig_resp.update_layout(
+                height=330, margin=dict(l=20, r=28, t=55, b=20),
+                xaxis_title="Casos activos", yaxis_title="", showlegend=False,
+            )
+            fig_resp.update_traces(textposition="outside", cliponaxis=False)
+            st.plotly_chart(fig_resp, use_container_width=True, config={"displayModeBar": False})
+            st.caption("Muestra la carga operativa actual. El detalle al pasar el cursor incluye casos vencidos.")
 
     st.markdown("### Tiempos del proceso")
     tiempos_asignacion = [
@@ -2239,14 +2353,14 @@ elif pagina == "Métricas":
 
     t1, t2, t3 = st.columns(3)
     with t1:
-        valor = f"{sum(tiempos_asignacion)/len(tiempos_asignacion):.1f} min" if tiempos_asignacion else "Sin datos"
-        kpi_card("Recepción → asignación", valor, "Tiempo promedio desde que llega un correo hasta que se asigna a un ejecutivo.")
+        prom_asignacion = (sum(tiempos_asignacion) / len(tiempos_asignacion)) if tiempos_asignacion else None
+        kpi_card("Recepción → asignación", formatear_duracion(prom_asignacion), "Promedio desde que llega un correo hasta su asignación.")
     with t2:
-        valor = f"{sum(tiempos_cierre)/len(tiempos_cierre):.1f} min" if tiempos_cierre else "Sin casos cerrados"
-        kpi_card("Asignación → cierre", valor, "Tiempo promedio desde la asignación hasta el cierre final.")
+        prom_cierre = (sum(tiempos_cierre) / len(tiempos_cierre)) if tiempos_cierre else None
+        kpi_card("Asignación → cierre", formatear_duracion(prom_cierre), "Promedio desde la asignación hasta el cierre final.")
     with t3:
         porcentaje = (len(revision_humana) / len(casos) * 100) if len(casos) else 0
-        kpi_card("Revisión humana requerida", f"{porcentaje:.1f}%", "Porcentaje de casos que el agente marcó para revisión especial.")
+        kpi_card("Revisión humana requerida", f"{porcentaje:.1f}%", f"{len(revision_humana)} de {len(casos)} casos requirieron validación especial.")
 
     with st.expander("Glosario de indicadores"):
         st.markdown(
