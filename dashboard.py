@@ -351,13 +351,38 @@ st.markdown(
         background:transparent !important;
     }
 
-    /* Mantiene visible el control para abrir/cerrar el menu lateral */
+    /* Mantiene visible el control para abrir/cerrar el menu lateral.
+       Streamlit usa distintos data-testid segun la version. */
     [data-testid="stSidebarCollapseButton"],
-    [data-testid="stSidebarCollapsedControl"] {
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="collapsedControl"] {
         display:flex !important;
         visibility:visible !important;
         opacity:1 !important;
-        z-index:1000 !important;
+        z-index:999999 !important;
+    }
+
+    /* Boton flotante que reaparece cuando el sidebar esta cerrado */
+    [data-testid="collapsedControl"] {
+        position:fixed !important;
+        top:.75rem !important;
+        left:.75rem !important;
+        width:2.5rem !important;
+        height:2.5rem !important;
+        align-items:center !important;
+        justify-content:center !important;
+        background:#FFFFFF !important;
+        border:1px solid #D5DEEC !important;
+        border-radius:10px !important;
+        box-shadow:0 4px 14px rgba(23,59,122,.12) !important;
+        color:#173B7A !important;
+    }
+
+    [data-testid="collapsedControl"] button {
+        display:flex !important;
+        visibility:visible !important;
+        opacity:1 !important;
+        color:#173B7A !important;
     }
 
     .block-container {padding-top:1rem !important;}
