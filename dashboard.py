@@ -336,10 +336,31 @@ st.markdown(
 st.markdown(
     """
     <style>
-    #MainMenu, footer, [data-testid="stToolbar"], [data-testid="stDecoration"],
-    [data-testid="stHeaderActionElements"] {display:none !important;}
-    [data-testid="stHeader"] {height:0 !important; min-height:0 !important; background:transparent !important;}
-    .block-container {padding-top:.8rem !important;}
+    #MainMenu,
+    footer,
+    [data-testid="stToolbar"],
+    [data-testid="stDecoration"],
+    [data-testid="stHeaderActionElements"] {
+        display:none !important;
+    }
+
+    /* Conserva un header minimo para mantener disponible el control del sidebar */
+    [data-testid="stHeader"] {
+        height:3rem !important;
+        min-height:3rem !important;
+        background:transparent !important;
+    }
+
+    /* Mantiene visible el control para abrir/cerrar el menu lateral */
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="stSidebarCollapsedControl"] {
+        display:flex !important;
+        visibility:visible !important;
+        opacity:1 !important;
+        z-index:1000 !important;
+    }
+
+    .block-container {padding-top:1rem !important;}
     .app-topbar {padding:15px 20px !important; border-radius:16px !important; margin-bottom:16px !important;}
     .app-topbar-title {font-size:1.32rem !important;}
     .app-topbar-status {float:right; font-size:.78rem; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.18); padding:6px 10px; border-radius:999px;}
