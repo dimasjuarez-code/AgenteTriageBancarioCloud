@@ -351,22 +351,28 @@ st.markdown(
         background:transparent !important;
     }
 
-    /* Mantiene visible el control para abrir/cerrar el menu lateral.
-       Streamlit usa distintos data-testid segun la version. */
+    /* Controles nativos del sidebar. Streamlit ha cambiado estos test-id entre versiones. */
     [data-testid="stSidebarCollapseButton"],
     [data-testid="stSidebarCollapsedControl"],
-    [data-testid="collapsedControl"] {
+    [data-testid="collapsedControl"],
+    [data-testid="stExpandSidebarButton"],
+    button[aria-label="Expand sidebar"],
+    button[aria-label="Collapse sidebar"] {
         display:flex !important;
         visibility:visible !important;
         opacity:1 !important;
+        pointer-events:auto !important;
         z-index:999999 !important;
     }
 
-    /* Boton flotante que reaparece cuando el sidebar esta cerrado */
+    /* Cuando el sidebar esta cerrado, fuerza a mostrar el boton de reapertura. */
+    [data-testid="stExpandSidebarButton"],
+    [data-testid="stSidebarCollapsedControl"],
     [data-testid="collapsedControl"] {
         position:fixed !important;
-        top:.75rem !important;
+        top:.65rem !important;
         left:.75rem !important;
+        min-width:2.5rem !important;
         width:2.5rem !important;
         height:2.5rem !important;
         align-items:center !important;
@@ -374,14 +380,18 @@ st.markdown(
         background:#FFFFFF !important;
         border:1px solid #D5DEEC !important;
         border-radius:10px !important;
-        box-shadow:0 4px 14px rgba(23,59,122,.12) !important;
+        box-shadow:0 4px 14px rgba(23,59,122,.14) !important;
         color:#173B7A !important;
     }
 
-    [data-testid="collapsedControl"] button {
+    [data-testid="stExpandSidebarButton"] button,
+    [data-testid="stSidebarCollapsedControl"] button,
+    [data-testid="collapsedControl"] button,
+    button[aria-label="Expand sidebar"] {
         display:flex !important;
         visibility:visible !important;
         opacity:1 !important;
+        pointer-events:auto !important;
         color:#173B7A !important;
     }
 
