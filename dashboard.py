@@ -2,6 +2,7 @@
 import os
 import sqlite3
 from datetime import datetime
+from typing import Tuple
 
 import pandas as pd
 import streamlit as st
@@ -491,7 +492,7 @@ def load_demo_cases() -> pd.DataFrame:
 
 
 @st.cache_data(ttl=30, show_spinner=False)
-def load_cases() -> tuple[pd.DataFrame, str]:
+def load_cases() -> Tuple[pd.DataFrame, str]:
     """
     Intenta:
     1) PostgreSQL/Supabase mediante DATABASE_URL.
@@ -509,7 +510,11 @@ def load_cases() -> tuple[pd.DataFrame, str]:
         try:
             import psycopg2
 
-            conn = psycopg2.connect(database_url)
+            conn = psycopg2.connect(
+                database_url,
+                connect_timeout=5,
+                options="-c statement_timeout=5000",
+            )
             try:
                 df = pd.read_sql_query(f'SELECT * FROM "{TABLE_NAME}"', conn)
             finally:
@@ -526,7 +531,7 @@ def load_cases() -> tuple[pd.DataFrame, str]:
     # ---------- SQLite ----------
     if os.path.exists(SQLITE_PATH):
         try:
-            conn = sqlite3.connect(SQLITE_PATH)
+            conn = sqlite3.connect(SQLITE_PATH, timeout=3)
             try:
                 df = pd.read_sql_query(f'SELECT * FROM "{TABLE_NAME}"', conn)
             finally:
