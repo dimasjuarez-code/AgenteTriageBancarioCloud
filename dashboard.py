@@ -1501,6 +1501,18 @@ if not autenticar_dashboard():
 
 usuario_sesion = usuario_actual()
 
+# Navegación solicitada desde botones de acceso rápido. Se procesa antes
+# de crear el widget de navegación para evitar conflictos con Session State.
+if st.session_state.get("_nav_request"):
+    st.session_state["nav_principal_v9"] = st.session_state.pop("_nav_request")
+
+def ir_a_bandeja(foco="Todos", row_id=None):
+    """Envía al usuario a la bandeja con un foco opcional y un caso preseleccionado."""
+    st.session_state["_nav_request"] = "Bandeja y gestión"
+    st.session_state["_bandeja_foco_request"] = foco
+    if row_id is not None:
+        st.session_state["_bandeja_caso_request"] = int(row_id)
+
 with st.sidebar:
     st.markdown(
         """
@@ -1629,103 +1641,178 @@ pii = casos[casos["pii_detectada"].fillna(0).astype(int) == 1]
 guardrails = casos[casos["Guardrail"] != "Ninguno"]
 
 # ============================================================
-# PÁGINA: INICIO OPERATIVO
+# PÁGINA: INICIO — CENTRO OPERATIVO
 # ============================================================
 if pagina == "Inicio":
-    titulo_inicio = "Resumen operativo global" if usuario_sesion["rol"] == "ADMIN" else "Mi jornada de casos"
+    titulo_inicio = "Centro operativo" if usuario_sesion["rol"] == "ADMIN" else "Mi centro operativo"
     st.markdown(f"## {titulo_inicio}")
     st.markdown(
-        '<div class="section-note">Indicadores y acceso directo a los casos que requieren atención.</div>',
+        '<div class="section-note">Esta vista sirve para entender qué requiere atención y decidir dónde entrar. La gestión detallada se realiza en Bandeja y gestión.</div>',
         unsafe_allow_html=True,
     )
 
-    h1, h2, h3, h4, h5, h6 = st.columns(6)
+    # --- 1. Estado actual -------------------------------------------------
+    h1, h2, h3, h4, h5 = st.columns(5)
     with h1:
-        kpi_card("Casos", len(casos), "Casos dentro de tu alcance.")
+        kpi_card("Pendientes", len(abiertos), "Casos aún no cerrados.")
     with h2:
-        kpi_card("Pendientes", len(abiertos), "Aún requieren gestión.")
-    with h3:
         kpi_card("Críticos", len(criticos), "Prioridad crítica y activos.")
-    with h4:
+    with h3:
         kpi_card("Fuera de plazo", len(vencidos), "Casos activos con SLA vencido.")
+    with h4:
+        kpi_card("Revisión humana", len(revision_humana), "Casos que requieren validación HITL.")
     with h5:
-        kpi_card("Revisión humana", len(revision_humana), "Marcados para validación especial.")
-    with h6:
         kpi_card("Guardrails", len(guardrails), "Casos con alertas de seguridad.")
 
-    st.markdown("### Prioridades de atención")
-    st.caption("Puedes filtrar y abrir un caso desde Inicio. La gestión que aparece aquí es la misma del flujo HITL original.")
-
-    opciones_foco = ["Todos los pendientes", "Críticos", "Fuera de plazo", "Revisión humana", "Con guardrails"]
-    foco = st.segmented_control(
-        "Foco operativo",
-        opciones_foco,
-        default="Todos los pendientes",
-        key="foco_inicio_v9",
+    # --- 2. Acciones rápidas: navegar, no gestionar aquí ------------------
+    st.markdown("### Accesos rápidos")
+    q1, q2, q3, q4, q5 = st.columns(5)
+    q1.button(
+        "Ver todos los pendientes",
+        use_container_width=True,
+        key="inicio_ir_pendientes",
+        on_click=ir_a_bandeja,
+        args=("Todos",),
+    )
+    q2.button(
+        f"Críticos ({len(criticos)})",
+        use_container_width=True,
+        key="inicio_ir_criticos",
+        on_click=ir_a_bandeja,
+        args=("Críticos",),
+        disabled=len(criticos) == 0,
+    )
+    q3.button(
+        f"Fuera de plazo ({len(vencidos)})",
+        use_container_width=True,
+        key="inicio_ir_vencidos",
+        on_click=ir_a_bandeja,
+        args=("Fuera de plazo",),
+        disabled=len(vencidos) == 0,
+    )
+    q4.button(
+        f"Revisión humana ({len(revision_humana)})",
+        use_container_width=True,
+        key="inicio_ir_hitl",
+        on_click=ir_a_bandeja,
+        args=("Revisión humana",),
+        disabled=len(revision_humana) == 0,
+    )
+    q5.button(
+        f"Guardrails ({len(guardrails)})",
+        use_container_width=True,
+        key="inicio_ir_guardrails",
+        on_click=ir_a_bandeja,
+        args=("Guardrails",),
+        disabled=len(guardrails) == 0,
     )
 
-    foco_df = casos[~casos["estado"].isin(["RESUELTO", "CERRADO"])].copy()
-    if foco == "Críticos":
-        foco_df = foco_df[foco_df["prioridad"] == "CRITICA"]
-    elif foco == "Fuera de plazo":
-        foco_df = foco_df[foco_df["SLA_TECNICO"] == "VENCIDO"]
-    elif foco == "Revisión humana":
-        foco_df = foco_df[foco_df["requiere_revision_humana"].fillna(0).astype(int) == 1]
-    elif foco == "Con guardrails":
-        foco_df = foco_df[foco_df["Guardrail"] != "Ninguno"]
+    # --- 3. Qué atender primero -------------------------------------------
+    st.markdown("### Qué requiere atención ahora")
+    st.caption(
+        "Orden sugerido por una regla transparente: prioridad crítica, SLA vencido, revisión humana y luego antigüedad de recepción."
+    )
 
-    foco_df = foco_df.sort_values(["_fecha_recepcion_dt", "id"], ascending=[False, False], na_position="last")
+    candidatos = abiertos.copy()
+    if not candidatos.empty:
+        candidatos["_orden_critico"] = (candidatos["prioridad"] == "CRITICA").astype(int)
+        candidatos["_orden_vencido"] = (candidatos["SLA_TECNICO"] == "VENCIDO").astype(int)
+        candidatos["_orden_hitl"] = candidatos["requiere_revision_humana"].fillna(0).astype(int)
+        candidatos = candidatos.sort_values(
+            ["_orden_critico", "_orden_vencido", "_orden_hitl", "_fecha_recepcion_dt", "id"],
+            ascending=[False, False, False, True, True],
+            na_position="last",
+        )
 
-    if foco_df.empty:
-        st.success("No hay casos pendientes para el criterio seleccionado.")
+        caso_siguiente = candidatos.iloc[0]
+        motivos = []
+        if caso_siguiente.get("prioridad") == "CRITICA":
+            motivos.append("prioridad crítica")
+        if caso_siguiente.get("SLA_TECNICO") == "VENCIDO":
+            motivos.append("fuera de plazo")
+        if int(caso_siguiente.get("requiere_revision_humana") or 0) == 1:
+            motivos.append("requiere revisión humana")
+        if not motivos:
+            motivos.append("es el pendiente más antiguo según la regla de priorización")
+
+        ticket_siguiente = caso_siguiente.get("ticket_id") or f"ID {caso_siguiente.get('id')}"
+        cliente_siguiente = caso_siguiente.get("nombre_cliente") or "Cliente sin nombre"
+        fecha_siguiente = caso_siguiente.get("Fecha recepción") or "Sin fecha"
+        categoria_siguiente = caso_siguiente.get("categoria") or "Sin categoría"
+        prioridad_siguiente = caso_siguiente.get("prioridad") or "Sin prioridad"
+        st.markdown(
+            f"""
+            <div class="case-summary-grid">
+                <div class="case-summary-item"><div class="case-summary-label">Caso sugerido</div><div class="case-summary-value">{html.escape(str(ticket_siguiente))}</div><div class="case-summary-sub">{html.escape(str(cliente_siguiente))}</div></div>
+                <div class="case-summary-item"><div class="case-summary-label">Recibido</div><div class="case-summary-value">{html.escape(str(fecha_siguiente))}</div></div>
+                <div class="case-summary-item"><div class="case-summary-label">Categoría</div><div class="case-summary-value">{html.escape(str(categoria_siguiente))}</div></div>
+                <div class="case-summary-item"><div class="case-summary-label">Prioridad</div><div class="case-summary-value">{html.escape(str(prioridad_siguiente))}</div></div>
+                <div class="case-summary-item"><div class="case-summary-label">Por qué aparece primero</div><div class="case-summary-sub">{html.escape(', '.join(motivos))}</div></div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.button(
+            "Abrir este caso en Bandeja y gestión",
+            type="primary",
+            key="inicio_abrir_siguiente",
+            on_click=ir_a_bandeja,
+            args=("Todos", int(caso_siguiente["id"])),
+        )
     else:
-        tabla_inicio = foco_df.rename(columns={
+        st.success("No tienes casos pendientes en este momento.")
+
+    # --- 4. Visión de carga / actividad -----------------------------------
+    c_actividad, c_carga = st.columns([1.25, 0.75], gap="large")
+
+    with c_actividad:
+        st.markdown("### Actividad reciente")
+        recientes = casos.sort_values(
+            ["_fecha_recepcion_dt", "id"], ascending=[False, False], na_position="last"
+        ).head(8).copy()
+        tabla_recientes = recientes.rename(columns={
             "ticket_id": "Ticket",
             "nombre_cliente": "Cliente",
             "categoria": "Categoría",
             "prioridad": "Prioridad",
             "Estado visible": "Estado",
-            "responsable_asignado": "Ejecutivo",
         })
-        cols_inicio = ["Fecha recepción", "Ticket", "Cliente", "Categoría", "Prioridad", "Estado", "Ejecutivo", "SLA"]
-        cols_inicio = [c for c in cols_inicio if c in tabla_inicio.columns]
+        cols_recientes = ["Fecha recepción", "Ticket", "Cliente", "Categoría", "Prioridad", "Estado"]
+        cols_recientes = [c for c in cols_recientes if c in tabla_recientes.columns]
         st.dataframe(
-            tabla_inicio[cols_inicio].head(12),
+            tabla_recientes[cols_recientes],
             use_container_width=True,
             hide_index=True,
-            height=min(420, 75 + min(12, len(tabla_inicio)) * 34),
-            column_config={
-                "Fecha recepción": st.column_config.TextColumn("Fecha", width="medium"),
-                "Ticket": st.column_config.TextColumn("Ticket", width="small"),
-                "Cliente": st.column_config.TextColumn("Cliente", width="medium"),
-                "Categoría": st.column_config.TextColumn("Categoría", width="small"),
-                "Prioridad": st.column_config.TextColumn("Prioridad", width="small"),
-                "Estado": st.column_config.TextColumn("Estado", width="medium"),
-                "Ejecutivo": st.column_config.TextColumn("Ejecutivo", width="medium"),
-                "SLA": st.column_config.TextColumn("Plazo", width="small"),
-            },
+            height=min(350, 75 + max(1, len(tabla_recientes)) * 34),
         )
 
-        opciones_inicio = {
-            f"{row.get('Fecha recepción') or 'Sin fecha'} · {row.get('ticket_id') or 'SIN-TICKET'} · "
-            f"{row.get('nombre_cliente') or 'Cliente'} · {row.get('categoria') or 'Sin categoría'}": int(row["id"])
-            for _, row in foco_df.iterrows()
-        }
-        seleccion_inicio = st.selectbox(
-            "Abrir y gestionar un caso",
-            list(opciones_inicio.keys()),
-            key="abrir_desde_inicio_v9",
-        )
-        caso_inicio = obtener_caso_autorizado(opciones_inicio[seleccion_inicio])
-        if caso_inicio:
-            st.divider()
-            ticket_inicio = caso_inicio.get("ticket_id") or str(caso_inicio.get("id"))
-            st.markdown(f'<div class="case-title">Caso {html.escape(str(ticket_inicio))}</div>', unsafe_allow_html=True)
-            actual_inicio = mostrar_barra_gestion_compacta(caso_inicio)
-            resumen_caso_compacto(caso_inicio)
-            renderizar_accion_actual(caso_inicio, actual_inicio)
-            st.caption("Información adicional")
-            mostrar_informacion_opcional(caso_inicio)
+    with c_carga:
+        if usuario_sesion["rol"] == "ADMIN":
+            st.markdown("### Carga por ejecutivo")
+            carga = (
+                abiertos["responsable_asignado"]
+                .fillna("Sin asignar")
+                .replace("", "Sin asignar")
+                .value_counts()
+                .rename_axis("Ejecutivo")
+                .reset_index(name="Pendientes")
+            )
+            if carga.empty:
+                st.info("No hay casos pendientes para distribuir.")
+            else:
+                st.dataframe(carga, use_container_width=True, hide_index=True, height=min(350, 75 + len(carga) * 34))
+        else:
+            st.markdown("### Mi situación")
+            propios = abiertos.copy()
+            en_gestion_propios = int((propios["estado"] == "EN_GESTION").sum())
+            nuevos_propios = int((propios["estado"] == "NUEVO").sum())
+            st.metric("Nuevos", nuevos_propios, help="Casos asignados que aún no han iniciado gestión.")
+            st.metric("En gestión", en_gestion_propios, help="Casos que ya estás trabajando.")
+            st.metric("Fuera de plazo", len(vencidos), help="Casos propios con SLA vencido.")
+
+    st.info(
+        "Inicio no modifica casos. Para evaluar la IA, reasignar, responder, resolver, cerrar o reabrir tickets, usa Bandeja y gestión."
+    )
 
 
 # ============================================================
@@ -1735,6 +1822,32 @@ elif pagina == "Bandeja y gestión":
     # Los cerrados salen de la bandeja operativa y pasan al historial.
     casos_activos = casos[casos["estado"] != "CERRADO"].copy()
     casos_cerrados = casos[casos["estado"] == "CERRADO"].copy()
+
+    st.markdown("## Bandeja y gestión")
+    st.markdown(
+        '<div class="section-note">Aquí se trabaja cada ticket: búsqueda, filtros, revisión HITL, reasignación, respuesta, resolución, cierre e historial.</div>',
+        unsafe_allow_html=True,
+    )
+
+    foco_solicitado = st.session_state.pop("_bandeja_foco_request", None)
+    opciones_foco_bandeja = ["Todos", "Críticos", "Fuera de plazo", "Revisión humana", "Guardrails"]
+    if foco_solicitado in opciones_foco_bandeja:
+        st.session_state["foco_bandeja_v9"] = foco_solicitado
+    foco_bandeja = st.segmented_control(
+        "Vista rápida",
+        opciones_foco_bandeja,
+        default=st.session_state.get("foco_bandeja_v9", "Todos"),
+        key="foco_bandeja_v9",
+    )
+
+    if foco_bandeja == "Críticos":
+        casos_activos = casos_activos[casos_activos["prioridad"] == "CRITICA"]
+    elif foco_bandeja == "Fuera de plazo":
+        casos_activos = casos_activos[casos_activos["SLA_TECNICO"] == "VENCIDO"]
+    elif foco_bandeja == "Revisión humana":
+        casos_activos = casos_activos[casos_activos["requiere_revision_humana"].fillna(0).astype(int) == 1]
+    elif foco_bandeja == "Guardrails":
+        casos_activos = casos_activos[casos_activos["Guardrail"] != "Ninguno"]
 
     # Orden operativo solicitado: del correo más reciente al más antiguo.
     casos_activos = casos_activos.sort_values(
@@ -1826,9 +1939,19 @@ elif pagina == "Bandeja y gestión":
             f"{row.get('categoria') or 'Sin categoría'} · {row.get('responsable_asignado') or 'Sin ejecutivo'}": int(row["id"])
             for _, row in filtrado.iterrows()
         }
+        etiquetas_opciones = list(opciones.keys())
+        caso_solicitado_id = st.session_state.pop("_bandeja_caso_request", None)
+        indice_inicial = 0
+        if caso_solicitado_id is not None:
+            for i, etiqueta in enumerate(etiquetas_opciones):
+                if opciones[etiqueta] == int(caso_solicitado_id):
+                    indice_inicial = i
+                    break
+
         seleccion = st.selectbox(
             "Abrir caso activo",
-            list(opciones.keys()),
+            etiquetas_opciones,
+            index=indice_inicial,
             help="Selecciona un ticket para iniciar o continuar la gestión guiada.",
             key="abrir_activo_v84",
         )
