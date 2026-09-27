@@ -1544,8 +1544,8 @@ def autenticar_dashboard():
             st.markdown(
                 """
                 <div class="login-brand">
-                    <div class="login-brand-title">Gestión Inteligente</div>
-                    <div class="login-brand-sub">Acceso al Centro de Gestión · Triaje, enrutamiento y revisión humana</div>
+                    <div class="login-brand-title">Agente de Triaje Bancario</div>
+                    <div class="login-brand-sub">MIIUC IND3340-1 Inteligencia Artificial para Negocios</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
