@@ -371,16 +371,64 @@ st.markdown(
         margin-bottom:4px;
     }
     .home-message-meta {
-        color:var(--app-muted);
+        color:#667085;
         font-size:.78rem;
-        margin-bottom:7px;
-        line-height:1.35;
+        margin-bottom:9px;
+        line-height:1.4;
+    }
+    .home-message-card {
+        background:#FFFFFF;
+        border:1px solid #DDE5F0;
+        border-radius:16px;
+        padding:16px 18px;
+        min-height:250px;
+        box-shadow:0 4px 14px rgba(34,52,84,.045);
+    }
+    .home-message-body {
+        background:#FFFFFF;
+        color:#17233A;
+        border:1px solid #E3E8F0;
+        border-radius:12px;
+        padding:14px 15px;
+        margin-top:10px;
+        min-height:170px;
+        max-height:310px;
+        overflow:auto;
+        white-space:pre-wrap;
+        overflow-wrap:anywhere;
+        font-family:"Segoe UI", Arial, sans-serif;
+        font-size:.90rem;
+        line-height:1.55;
+    }
+    .priority-contact {
+        display:grid;
+        grid-template-columns:repeat(3,minmax(0,1fr));
+        gap:10px 18px;
+        margin-top:12px;
+        padding-top:11px;
+        border-top:1px solid #E7ECF3;
+    }
+    .priority-contact-item {min-width:0;}
+    .priority-contact-label {
+        font-size:.72rem;
+        color:#7A8699;
+        text-transform:uppercase;
+        letter-spacing:.035em;
+        font-weight:700;
+        margin-bottom:2px;
+    }
+    .priority-contact-value {
+        font-size:.88rem;
+        color:#17233A;
+        font-weight:650;
+        overflow-wrap:anywhere;
     }
     @media (max-width: 1150px) {
         .home-case-head {grid-template-columns:1fr 1fr 1fr;}
     }
     @media (max-width: 760px) {
         .home-case-head {grid-template-columns:1fr 1fr;}
+        .priority-contact {grid-template-columns:1fr;}
     }
     </style>
     """,
@@ -1240,36 +1288,34 @@ def render_inicio_caso_detalle(caso, prefijo="inicio"):
     col_cliente, col_respuesta = st.columns(2, gap="large")
 
     with col_cliente:
-        with st.container(border=True):
-            st.markdown('<div class="home-message-title">Correo recibido del cliente</div>', unsafe_allow_html=True)
-            st.markdown(
-                f'<div class="home-message-meta">De: {_esc(correo)} · Asunto: {_esc(asunto)} · Recibido: {_esc(fecha)}</div>',
-                unsafe_allow_html=True,
-            )
-            st.text_area(
-                "Mensaje recibido del cliente",
-                value=str(mensaje),
-                height=190,
-                disabled=True,
-                label_visibility="collapsed",
-                key=f"{prefijo}_mensaje_cliente_{caso.get('id')}",
-            )
+        st.markdown(
+            f"""
+            <div class="home-message-card">
+                <div class="home-message-title">Correo recibido del cliente</div>
+                <div class="home-message-meta">
+                    <b>De:</b> {_esc(correo)}<br>
+                    <b>Asunto:</b> {_esc(asunto)}<br>
+                    <b>Recibido:</b> {_esc(fecha)}
+                </div>
+                <div class="home-message-body">{_esc(mensaje)}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     with col_respuesta:
-        with st.container(border=True):
-            st.markdown('<div class="home-message-title">Respuesta enviada al cliente</div>', unsafe_allow_html=True)
-            st.markdown(
-                f'<div class="home-message-meta">Estado de envío: {_esc(estado_respuesta)}</div>',
-                unsafe_allow_html=True,
-            )
-            st.text_area(
-                "Respuesta enviada al cliente",
-                value=str(respuesta),
-                height=190,
-                disabled=True,
-                label_visibility="collapsed",
-                key=f"{prefijo}_respuesta_cliente_{caso.get('id')}",
-            )
+        st.markdown(
+            f"""
+            <div class="home-message-card">
+                <div class="home-message-title">Respuesta enviada al cliente</div>
+                <div class="home-message-meta">
+                    <b>Estado de envío:</b> {_esc(estado_respuesta)}
+                </div>
+                <div class="home-message-body">{_esc(respuesta)}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 def sugerencia_gestion(caso):
@@ -1990,7 +2036,16 @@ if pagina == "Inicio":
     # --- 1. Estado actual: los KPI también funcionan como acceso directo ---
     h1, h2, h3, h4, h5 = st.columns(5)
     with h1:
-        kpi_navegable("Pendientes", len(abiertos), "Casos aún no cerrados", "Todos", "pendientes")
+        with st.container(key="kpi_nav_pendientes"):
+            if st.button(
+                f"Pendientes\n{len(abiertos)}\nElegir un caso abierto",
+                key="btn_kpi_nav_pendientes",
+                use_container_width=True,
+                disabled=len(abiertos) == 0,
+            ):
+                st.session_state["inicio_mostrar_selector_casos"] = True
+                st.session_state["inicio_mostrar_selector_cerrados"] = False
+                st.rerun()
     with h2:
         kpi_navegable("Críticos", len(criticos), "Prioridad crítica", "Críticos", "criticos", disabled=len(criticos) == 0)
     with h3:
@@ -2000,39 +2055,30 @@ if pagina == "Inicio":
     with h5:
         kpi_navegable("Guardrails", len(guardrails), "Alertas de seguridad", "Guardrails", "guardrails", disabled=len(guardrails) == 0)
 
-    # --- 3. Qué atender primero -------------------------------------------
-    st.markdown("### Qué requiere atención ahora")
+    # --- 3. Caso sugerido: siempre el pendiente más antiguo ---------------
+    st.markdown("### Caso sugerido")
     st.caption(
-        "Orden sugerido por una regla transparente: prioridad crítica, SLA vencido, revisión humana y luego antigüedad de recepción."
+        "Se propone siempre el caso abierto con la fecha de recepción más antigua para evitar que queden pendientes rezagados."
     )
 
     candidatos = abiertos.copy()
     caso_siguiente = None
 
     if not candidatos.empty:
-        candidatos["_orden_critico"] = (candidatos["prioridad"] == "CRITICA").astype(int)
-        candidatos["_orden_vencido"] = (candidatos["SLA_TECNICO"] == "VENCIDO").astype(int)
-        candidatos["_orden_hitl"] = candidatos["requiere_revision_humana"].fillna(0).astype(int)
         candidatos = candidatos.sort_values(
-            ["_orden_critico", "_orden_vencido", "_orden_hitl", "_fecha_recepcion_dt", "id"],
-            ascending=[False, False, False, True, True],
+            ["_fecha_recepcion_dt", "id"],
+            ascending=[True, True],
             na_position="last",
         )
 
         caso_siguiente = candidatos.iloc[0]
-        motivos = []
-        if caso_siguiente.get("prioridad") == "CRITICA":
-            motivos.append("prioridad crítica")
-        if caso_siguiente.get("SLA_TECNICO") == "VENCIDO":
-            motivos.append("fuera de plazo")
-        if int(caso_siguiente.get("requiere_revision_humana") or 0) == 1:
-            motivos.append("requiere revisión humana")
-        if not motivos:
-            motivos.append("es el pendiente más antiguo según la regla de priorización")
+        motivos = ["es el caso abierto más antiguo"]
 
         ticket_siguiente = caso_siguiente.get("ticket_id") or f"ID {caso_siguiente.get('id')}"
         cliente_siguiente = caso_siguiente.get("nombre_cliente") or "Cliente sin nombre"
+        correo_siguiente = extraer_email(caso_siguiente.get("remitente")) or "Correo no disponible"
         fecha_siguiente = caso_siguiente.get("Fecha recepción") or "Sin fecha"
+        asunto_siguiente = caso_siguiente.get("asunto") or "Sin asunto"
         categoria_siguiente = caso_siguiente.get("categoria") or "Sin categoría"
         prioridad_siguiente = caso_siguiente.get("prioridad") or "Sin prioridad"
         antiguedad_siguiente = formatear_antiguedad(caso_siguiente.get("_fecha_recepcion_dt"))
@@ -2048,7 +2094,7 @@ if pagina == "Inicio":
             <div class="priority-card">
                 <div class="priority-head">
                     <div>
-                        <div class="case-summary-label">Caso sugerido</div>
+                        <div class="case-summary-label">Caso abierto más antiguo</div>
                         <div class="priority-ticket">{html.escape(str(ticket_siguiente))}</div>
                         <div class="priority-client">{html.escape(str(cliente_siguiente))}</div>
                     </div>
@@ -2058,7 +2104,25 @@ if pagina == "Inicio":
                         {''.join(extras)}
                     </div>
                 </div>
-                <div class="age-text"><b>{html.escape(antiguedad_siguiente)}</b> · {html.escape(str(fecha_siguiente))} · Motivo: {html.escape(', '.join(motivos))}</div>
+                <div class="priority-contact">
+                    <div class="priority-contact-item">
+                        <div class="priority-contact-label">Cliente</div>
+                        <div class="priority-contact-value">{html.escape(str(cliente_siguiente))}</div>
+                    </div>
+                    <div class="priority-contact-item">
+                        <div class="priority-contact-label">Correo</div>
+                        <div class="priority-contact-value">{html.escape(str(correo_siguiente))}</div>
+                    </div>
+                    <div class="priority-contact-item">
+                        <div class="priority-contact-label">Fecha de recepción</div>
+                        <div class="priority-contact-value">{html.escape(str(fecha_siguiente))}</div>
+                    </div>
+                    <div class="priority-contact-item" style="grid-column:1 / -1;">
+                        <div class="priority-contact-label">Asunto</div>
+                        <div class="priority-contact-value">{html.escape(str(asunto_siguiente))}</div>
+                    </div>
+                </div>
+                <div class="age-text"><b>{html.escape(antiguedad_siguiente)}</b> · Motivo: {html.escape(', '.join(motivos))}</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -2084,14 +2148,14 @@ if pagina == "Inicio":
         accion_abiertos, accion_cerrados = st.columns([1, 1])
 
     with accion_abiertos:
-        if st.button(
-            f"Casos abiertos ({len(casos[casos['estado'] != 'CERRADO'])})",
+        st.button(
+            f"Bandeja de casos abiertos ({len(casos[casos['estado'] != 'CERRADO'])})",
             use_container_width=True,
-            key="inicio_toggle_selector_abiertos",
-        ):
-            st.session_state["inicio_mostrar_selector_casos"] = True
-            st.session_state["inicio_mostrar_selector_cerrados"] = False
-            st.rerun()
+            key="inicio_ir_bandeja_abiertos",
+            help="Abre la bandeja completa para buscar, filtrar y gestionar los casos abiertos.",
+            on_click=ir_a_bandeja,
+            args=("Todos",),
+        )
 
     with accion_cerrados:
         if st.button(
@@ -2108,7 +2172,7 @@ if pagina == "Inicio":
         st.markdown("### Elegir un caso abierto")
         st.caption(
             "Selecciona directamente cualquier caso abierto dentro de tu alcance. "
-            "El listado está ordenado desde el más reciente al más antiguo y puedes escribir para buscar."
+            "El listado está ordenado desde el más reciente al más antiguo y puedes escribir para buscar por ticket, cliente, categoría o fecha."
         )
 
         casos_disponibles_inicio = casos[casos["estado"] != "CERRADO"].copy()
