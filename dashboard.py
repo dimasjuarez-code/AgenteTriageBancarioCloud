@@ -1858,6 +1858,8 @@ if pagina == "Inicio":
     )
 
     candidatos = abiertos.copy()
+    caso_siguiente = None
+
     if not candidatos.empty:
         candidatos["_orden_critico"] = (candidatos["prioridad"] == "CRITICA").astype(int)
         candidatos["_orden_vencido"] = (candidatos["SLA_TECNICO"] == "VENCIDO").astype(int)
@@ -1891,6 +1893,7 @@ if pagina == "Inicio":
             extras.append('<span class="tag tag-red">SLA vencido</span>')
         if int(caso_siguiente.get("requiere_revision_humana") or 0) == 1:
             extras.append('<span class="tag tag-purple">Revisión humana</span>')
+
         st.markdown(
             f"""
             <div class="priority-card">
@@ -1911,7 +1914,14 @@ if pagina == "Inicio":
             """,
             unsafe_allow_html=True,
         )
-        accion_sugerido, accion_elegir = st.columns([1, 1])
+    else:
+        st.success("No tienes casos pendientes en este momento.")
+
+    # --- Accesos directos desde Inicio -----------------------------------
+    # Los selectores de abiertos y cerrados son mutuamente excluyentes para
+    # mantener la página simple y evitar dos paneles largos al mismo tiempo.
+    if caso_siguiente is not None:
+        accion_sugerido, accion_abiertos, accion_cerrados = st.columns([1.15, 1, 1])
         with accion_sugerido:
             st.button(
                 "Abrir caso sugerido",
@@ -1921,26 +1931,35 @@ if pagina == "Inicio":
                 on_click=ir_a_bandeja,
                 args=("Todos", int(caso_siguiente["id"])),
             )
-        with accion_elegir:
-            if st.button(
-                "Elegir otro caso",
-                use_container_width=True,
-                key="inicio_toggle_selector_casos",
-            ):
-                st.session_state["inicio_mostrar_selector_casos"] = not st.session_state.get(
-                    "inicio_mostrar_selector_casos", False
-                )
-                st.rerun()
     else:
-        st.success("No tienes casos pendientes en este momento.")
+        accion_abiertos, accion_cerrados = st.columns([1, 1])
 
-    # Selector de trabajo: permite elegir cualquier caso activo dentro del
-    # alcance del usuario sin convertir Inicio en una segunda bandeja.
+    with accion_abiertos:
+        if st.button(
+            f"Casos abiertos ({len(casos[casos['estado'] != 'CERRADO'])})",
+            use_container_width=True,
+            key="inicio_toggle_selector_abiertos",
+        ):
+            st.session_state["inicio_mostrar_selector_casos"] = True
+            st.session_state["inicio_mostrar_selector_cerrados"] = False
+            st.rerun()
+
+    with accion_cerrados:
+        if st.button(
+            f"Casos cerrados ({len(casos[casos['estado'] == 'CERRADO'])})",
+            use_container_width=True,
+            key="inicio_toggle_selector_cerrados",
+        ):
+            st.session_state["inicio_mostrar_selector_cerrados"] = True
+            st.session_state["inicio_mostrar_selector_casos"] = False
+            st.rerun()
+
+    # --- Selector de casos abiertos --------------------------------------
     if st.session_state.get("inicio_mostrar_selector_casos", False):
-        st.markdown("### Elegir un caso para trabajar")
+        st.markdown("### Elegir un caso abierto")
         st.caption(
-            "Se muestran todos los casos disponibles para gestión dentro de tu alcance, "
-            "ordenados desde el más reciente al más antiguo."
+            "Selecciona directamente cualquier caso abierto dentro de tu alcance. "
+            "El listado está ordenado desde el más reciente al más antiguo y puedes escribir para buscar."
         )
 
         casos_disponibles_inicio = casos[casos["estado"] != "CERRADO"].copy()
@@ -1951,7 +1970,7 @@ if pagina == "Inicio":
         )
 
         if casos_disponibles_inicio.empty:
-            st.info("No hay casos disponibles para trabajar en este momento.")
+            st.info("No hay casos abiertos disponibles en este momento.")
         else:
             opciones_inicio = {}
             for _, fila in casos_disponibles_inicio.iterrows():
@@ -1966,10 +1985,10 @@ if pagina == "Inicio":
                 opciones_inicio[etiqueta] = int(fila["id"])
 
             seleccion_inicio = st.selectbox(
-                f"Casos disponibles ({len(opciones_inicio)})",
+                f"Casos abiertos disponibles ({len(opciones_inicio)})",
                 list(opciones_inicio.keys()),
                 key="inicio_selector_caso_trabajo",
-                help="Puedes escribir dentro del selector para buscar por ticket, cliente, categoría o fecha.",
+                help="Escribe dentro del selector para buscar por ticket, cliente, categoría o fecha.",
             )
 
             fila_seleccionada = casos_disponibles_inicio[
@@ -1983,6 +2002,14 @@ if pagina == "Inicio":
             s4.metric("Prioridad", fila_seleccionada.get("prioridad") or "Sin prioridad")
             s5.metric("Estado", fila_seleccionada.get("Estado visible") or nombre_estado(fila_seleccionada.get("estado")))
 
+            caso_abierto = obtener_caso_autorizado(opciones_inicio[seleccion_inicio])
+            if caso_abierto:
+                with st.expander("Ver resumen antes de abrir", expanded=False):
+                    st.write(f"**Fecha de recepción:** {caso_abierto.get('fecha_recepcion') or 'No disponible'}")
+                    st.write(f"**Asunto:** {caso_abierto.get('asunto') or 'Sin asunto'}")
+                    st.write(f"**Ejecutivo:** {caso_abierto.get('responsable_asignado') or 'Sin asignar'}")
+                    st.write(f"**Área:** {caso_abierto.get('area_derivada') or 'No disponible'}")
+
             abrir_col, ocultar_col = st.columns([1, 1])
             with abrir_col:
                 st.button(
@@ -1995,12 +2022,145 @@ if pagina == "Inicio":
                 )
             with ocultar_col:
                 if st.button(
-                    "Ocultar selector",
+                    "Ocultar casos abiertos",
                     use_container_width=True,
                     key="inicio_ocultar_selector_casos",
                 ):
                     st.session_state["inicio_mostrar_selector_casos"] = False
                     st.rerun()
+
+    # --- Selector de casos cerrados --------------------------------------
+    if st.session_state.get("inicio_mostrar_selector_cerrados", False):
+        st.markdown("### Consultar un caso cerrado")
+        st.caption(
+            "Selecciona cualquier caso cerrado dentro de tu alcance. Puedes revisar sus antecedentes "
+            "completos y, si corresponde, reabrirlo para continuar la gestión."
+        )
+
+        casos_cerrados_inicio = casos[casos["estado"] == "CERRADO"].copy()
+        casos_cerrados_inicio = casos_cerrados_inicio.sort_values(
+            ["_fecha_recepcion_dt", "id"],
+            ascending=[False, False],
+            na_position="last",
+        )
+
+        if casos_cerrados_inicio.empty:
+            st.info("Todavía no hay casos cerrados dentro de tu alcance.")
+        else:
+            opciones_cerrados_inicio = {}
+            for _, fila in casos_cerrados_inicio.iterrows():
+                etiqueta = (
+                    f"{fila.get('Fecha recepción') or 'Sin fecha'} · "
+                    f"{fila.get('ticket_id') or 'SIN-TICKET'} · "
+                    f"{fila.get('nombre_cliente') or 'Cliente sin nombre'} · "
+                    f"{fila.get('categoria') or 'Sin categoría'} · "
+                    f"Cerrado: {fila.get('fecha_cierre') or 'Sin fecha de cierre'}"
+                )
+                opciones_cerrados_inicio[etiqueta] = int(fila["id"])
+
+            seleccion_cerrado_inicio = st.selectbox(
+                f"Casos cerrados disponibles ({len(opciones_cerrados_inicio)})",
+                list(opciones_cerrados_inicio.keys()),
+                key="inicio_selector_caso_cerrado",
+                help="Escribe dentro del selector para buscar por ticket, cliente, categoría o fecha.",
+            )
+
+            caso_cerrado_inicio = obtener_caso_autorizado(
+                opciones_cerrados_inicio[seleccion_cerrado_inicio]
+            )
+
+            if caso_cerrado_inicio:
+                st.markdown("#### Ficha del caso cerrado")
+                resumen_caso_compacto(caso_cerrado_inicio)
+
+                d1, d2, d3 = st.columns(3)
+                d1.metric("Recepción", caso_cerrado_inicio.get("fecha_recepcion") or "No disponible")
+                d2.metric("Cierre", caso_cerrado_inicio.get("fecha_cierre") or "No disponible")
+                d3.metric("SLA", nombre_sla(calcular_estado_sla(caso_cerrado_inicio)))
+
+                with st.expander("Ver antecedentes completos del caso", expanded=True):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.write(f"**Ticket:** {caso_cerrado_inicio.get('ticket_id') or 'Sin ticket'}")
+                        st.write(f"**Cliente:** {caso_cerrado_inicio.get('nombre_cliente') or 'No disponible'}")
+                        st.write(f"**Correo:** {extraer_email(caso_cerrado_inicio.get('remitente'))}")
+                        st.write(f"**Asunto:** {caso_cerrado_inicio.get('asunto') or 'Sin asunto'}")
+                        st.write(f"**Categoría:** {caso_cerrado_inicio.get('categoria') or 'No disponible'}")
+                        st.write(f"**Prioridad:** {caso_cerrado_inicio.get('prioridad') or 'No disponible'}")
+                    with c2:
+                        st.write(f"**Área:** {caso_cerrado_inicio.get('area_derivada') or 'No disponible'}")
+                        st.write(f"**Ejecutivo:** {caso_cerrado_inicio.get('responsable_asignado') or 'No disponible'}")
+                        st.write(f"**Estado:** {nombre_estado(caso_cerrado_inicio.get('estado'))}")
+                        st.write(f"**Sentimiento:** {caso_cerrado_inicio.get('sentimiento') or 'No disponible'}")
+                        st.write(f"**Fecha recepción:** {caso_cerrado_inicio.get('fecha_recepcion') or 'No disponible'}")
+                        st.write(f"**Fecha cierre:** {caso_cerrado_inicio.get('fecha_cierre') or 'No disponible'}")
+
+                    st.markdown("**Mensaje original**")
+                    st.text_area(
+                        "Mensaje original del caso cerrado",
+                        value=caso_cerrado_inicio.get("cuerpo_original") or "Sin contenido almacenado.",
+                        height=180,
+                        disabled=True,
+                        label_visibility="collapsed",
+                        key=f"inicio_cerrado_mensaje_{caso_cerrado_inicio['id']}",
+                    )
+
+                    st.markdown("**Gestión registrada**")
+                    st.write(caso_cerrado_inicio.get("nota_ejecutivo") or "Sin nota registrada.")
+
+                    st.markdown("**Comentario de evaluación**")
+                    st.write(caso_cerrado_inicio.get("comentario_feedback") or "Sin comentario registrado.")
+
+                with st.expander("Ver respuesta y trazabilidad del agente", expanded=False):
+                    st.write(
+                        "**Respuesta enviada al cliente:** "
+                        + (caso_cerrado_inicio.get("respuesta_cliente_texto") or "No hay respuesta almacenada.")
+                    )
+                    st.write(f"**Guardrail:** {construir_guardrail(caso_cerrado_inicio)}")
+                    conf = caso_cerrado_inicio.get("confianza_modelo")
+                    conf_txt = f"{float(conf):.2f}" if conf is not None else "No disponible"
+                    st.write(f"**Confianza estimada:** {conf_txt}")
+                    st.write(
+                        "**Revisión humana requerida:** "
+                        + ("Sí" if int(caso_cerrado_inicio.get("requiere_revision_humana") or 0) else "No")
+                    )
+                    st.write(
+                        "**Datos personales minimizados:** "
+                        + ("Sí" if int(caso_cerrado_inicio.get("pii_detectada") or 0) else "No")
+                    )
+
+                # Vista de auditoría completa: muestra todos los campos disponibles
+                # de la fila sin alterar la información almacenada.
+                with st.expander("Ver todos los campos registrados", expanded=False):
+                    auditoria = pd.DataFrame(
+                        [
+                            {"Campo": str(campo), "Valor": "" if valor is None else str(valor)}
+                            for campo, valor in caso_cerrado_inicio.items()
+                        ]
+                    )
+                    st.dataframe(auditoria, use_container_width=True, hide_index=True)
+
+                reabrir_col, ocultar_cerrados_col = st.columns([1, 1])
+                with reabrir_col:
+                    if st.button(
+                        "↩ Reabrir y trabajar este caso",
+                        type="primary",
+                        use_container_width=True,
+                        key=f"inicio_reabrir_cerrado_{caso_cerrado_inicio['id']}",
+                    ):
+                        actualizar_estado(caso_cerrado_inicio["id"], "EN_GESTION")
+                        st.session_state["inicio_mostrar_selector_cerrados"] = False
+                        ir_a_bandeja("Todos", int(caso_cerrado_inicio["id"]))
+                        st.rerun()
+
+                with ocultar_cerrados_col:
+                    if st.button(
+                        "Ocultar casos cerrados",
+                        use_container_width=True,
+                        key="inicio_ocultar_selector_cerrados",
+                    ):
+                        st.session_state["inicio_mostrar_selector_cerrados"] = False
+                        st.rerun()
 
     # --- 4. Visión de carga / actividad -----------------------------------
     c_actividad, c_carga = st.columns([1.25, 0.75], gap="large")
