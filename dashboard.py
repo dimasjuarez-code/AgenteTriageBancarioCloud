@@ -2064,10 +2064,46 @@ if pagina == "Inicio":
             "Revisión humana", "hitl", disabled=len(revision_humana) == 0,
         )
     with h5:
-        kpi_navegable(
-            "Guardrails", len(guardrails), "Alertas de seguridad",
-            "Guardrails", "guardrails", disabled=len(guardrails) == 0,
-        )
+        # Selector rápido de casos pendientes. Reemplaza el KPI Guardrails en Inicio.
+        # Guardrails sigue disponible como filtro operativo dentro de Bandeja y gestión.
+        casos_selector_inicio = abiertos.sort_values(
+            ["_fecha_recepcion_dt", "id"],
+            ascending=[False, False],
+            na_position="last",
+        ).copy()
+
+        opciones_selector_inicio = {}
+        for _, fila in casos_selector_inicio.iterrows():
+            etiqueta = (
+                f"{fila.get('Fecha recepción') or 'Sin fecha'} · "
+                f"{fila.get('ticket_id') or 'SIN-TICKET'} · "
+                f"{fila.get('nombre_cliente') or 'Cliente sin nombre'} · "
+                f"{fila.get('categoria') or 'Sin categoría'}"
+            )
+            opciones_selector_inicio[etiqueta] = int(fila["id"])
+
+        def _abrir_caso_selector_inicio():
+            etiqueta = st.session_state.get("inicio_selector_rapido_caso")
+            row_id = opciones_selector_inicio.get(etiqueta)
+            if row_id is not None:
+                ir_a_bandeja("Todos", row_id)
+
+        with st.container(border=True):
+            st.caption("ELEGIR CASO ABIERTO")
+            st.selectbox(
+                "Seleccionar caso para gestionar",
+                list(opciones_selector_inicio.keys()),
+                index=None,
+                placeholder=(
+                    f"{len(opciones_selector_inicio)} pendientes · elegir caso"
+                    if opciones_selector_inicio
+                    else "Sin casos pendientes"
+                ),
+                key="inicio_selector_rapido_caso",
+                help="Selecciona cualquier caso pendiente. Se abrirá directamente en Bandeja y gestión.",
+                disabled=not bool(opciones_selector_inicio),
+                on_change=_abrir_caso_selector_inicio,
+            )
 
     # --- 2. Caso sugerido --------------------------------------------------
     st.markdown("### Caso sugerido")
