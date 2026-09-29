@@ -1893,6 +1893,13 @@ def ir_a_bandeja(foco="Todos", row_id=None):
     if row_id is not None:
         st.session_state["_bandeja_caso_request"] = int(row_id)
 
+
+def ir_a_historial():
+    """Abre la Bandeja y deja visible el historial de casos cerrados."""
+    st.session_state["_nav_request"] = "Bandeja y gestión"
+    st.session_state["_bandeja_foco_request"] = "Todos"
+    st.session_state["_bandeja_historial_abierto"] = True
+
 with st.sidebar:
     st.markdown(
         """
@@ -2029,36 +2036,43 @@ if pagina == "Inicio":
     titulo_inicio = "Centro operativo" if usuario_sesion["rol"] == "ADMIN" else "Mi centro operativo"
     st.markdown(f"## {titulo_inicio}")
     st.markdown(
-        '<div class="section-note">Resumen operacional de los casos activos y sus prioridades.</div>',
+        '<div class="section-note">Vista principal para entender qué está ocurriendo, qué requiere atención y dónde entrar. La gestión detallada se realiza en Bandeja y gestión.</div>',
         unsafe_allow_html=True,
     )
 
-    # --- 1. Estado actual: los KPI también funcionan como acceso directo ---
+    # --- 1. Estado general -------------------------------------------------
+    # Los KPI sirven como accesos rápidos a la Bandeja con el filtro correcto.
     h1, h2, h3, h4, h5 = st.columns(5)
     with h1:
-        with st.container(key="kpi_nav_pendientes"):
-            if st.button(
-                f"Pendientes\n{len(abiertos)}\nElegir un caso abierto",
-                key="btn_kpi_nav_pendientes",
-                use_container_width=True,
-                disabled=len(abiertos) == 0,
-            ):
-                st.session_state["inicio_mostrar_selector_casos"] = True
-                st.session_state["inicio_mostrar_selector_cerrados"] = False
-                st.rerun()
+        kpi_navegable(
+            "Pendientes", len(abiertos), "Casos que aún requieren gestión",
+            "Todos", "pendientes", disabled=len(abiertos) == 0,
+        )
     with h2:
-        kpi_navegable("Críticos", len(criticos), "Prioridad crítica", "Críticos", "criticos", disabled=len(criticos) == 0)
+        kpi_navegable(
+            "Críticos", len(criticos), "Prioridad crítica",
+            "Críticos", "criticos", disabled=len(criticos) == 0,
+        )
     with h3:
-        kpi_navegable("Fuera de plazo", len(vencidos), "SLA vencido", "Fuera de plazo", "vencidos", disabled=len(vencidos) == 0)
+        kpi_navegable(
+            "Fuera de plazo", len(vencidos), "SLA vencido",
+            "Fuera de plazo", "vencidos", disabled=len(vencidos) == 0,
+        )
     with h4:
-        kpi_navegable("Revisión humana", len(revision_humana), "Validación HITL", "Revisión humana", "hitl", disabled=len(revision_humana) == 0)
+        kpi_navegable(
+            "Revisión humana", len(revision_humana), "Validación HITL",
+            "Revisión humana", "hitl", disabled=len(revision_humana) == 0,
+        )
     with h5:
-        kpi_navegable("Guardrails", len(guardrails), "Alertas de seguridad", "Guardrails", "guardrails", disabled=len(guardrails) == 0)
+        kpi_navegable(
+            "Guardrails", len(guardrails), "Alertas de seguridad",
+            "Guardrails", "guardrails", disabled=len(guardrails) == 0,
+        )
 
-    # --- 3. Caso sugerido: siempre el pendiente más antiguo ---------------
+    # --- 2. Caso sugerido --------------------------------------------------
     st.markdown("### Caso sugerido")
     st.caption(
-        "Se propone siempre el caso abierto con la fecha de recepción más antigua para evitar que queden pendientes rezagados."
+        "Se propone el caso abierto con la fecha de recepción más antigua para evitar que quede rezagado."
     )
 
     candidatos = abiertos.copy()
@@ -2070,9 +2084,7 @@ if pagina == "Inicio":
             ascending=[True, True],
             na_position="last",
         )
-
         caso_siguiente = candidatos.iloc[0]
-        motivos = ["es el caso abierto más antiguo"]
 
         ticket_siguiente = caso_siguiente.get("ticket_id") or f"ID {caso_siguiente.get('id')}"
         cliente_siguiente = caso_siguiente.get("nombre_cliente") or "Cliente sin nombre"
@@ -2081,269 +2093,79 @@ if pagina == "Inicio":
         asunto_siguiente = caso_siguiente.get("asunto") or "Sin asunto"
         categoria_siguiente = caso_siguiente.get("categoria") or "Sin categoría"
         prioridad_siguiente = caso_siguiente.get("prioridad") or "Sin prioridad"
+        estado_siguiente = caso_siguiente.get("Estado visible") or nombre_estado(caso_siguiente.get("estado"))
+        sla_siguiente = nombre_sla(caso_siguiente.get("SLA_TECNICO"))
+        ejecutivo_siguiente = caso_siguiente.get("responsable_asignado") or "Sin asignar"
         antiguedad_siguiente = formatear_antiguedad(caso_siguiente.get("_fecha_recepcion_dt"))
-        prioridad_css = "tag-red" if prioridad_siguiente in {"CRITICA", "ALTA"} else "tag-amber"
-        extras = []
-        if caso_siguiente.get("SLA_TECNICO") == "VENCIDO":
-            extras.append('<span class="tag tag-red">SLA vencido</span>')
-        if int(caso_siguiente.get("requiere_revision_humana") or 0) == 1:
-            extras.append('<span class="tag tag-purple">Revisión humana</span>')
 
-        st.markdown(
-            f"""
-            <div class="priority-card">
-                <div class="priority-head">
-                    <div>
-                        <div class="case-summary-label">Caso abierto más antiguo</div>
-                        <div class="priority-ticket">{html.escape(str(ticket_siguiente))}</div>
-                        <div class="priority-client">{html.escape(str(cliente_siguiente))}</div>
-                    </div>
-                    <div>
-                        <span class="tag tag-blue">{html.escape(str(categoria_siguiente))}</span>
-                        <span class="tag {prioridad_css}">{html.escape(str(prioridad_siguiente))}</span>
-                        {''.join(extras)}
-                    </div>
-                </div>
-                <div class="priority-contact">
-                    <div class="priority-contact-item">
-                        <div class="priority-contact-label">Cliente</div>
-                        <div class="priority-contact-value">{html.escape(str(cliente_siguiente))}</div>
-                    </div>
-                    <div class="priority-contact-item">
-                        <div class="priority-contact-label">Correo</div>
-                        <div class="priority-contact-value">{html.escape(str(correo_siguiente))}</div>
-                    </div>
-                    <div class="priority-contact-item">
-                        <div class="priority-contact-label">Fecha de recepción</div>
-                        <div class="priority-contact-value">{html.escape(str(fecha_siguiente))}</div>
-                    </div>
-                    <div class="priority-contact-item" style="grid-column:1 / -1;">
-                        <div class="priority-contact-label">Asunto</div>
-                        <div class="priority-contact-value">{html.escape(str(asunto_siguiente))}</div>
-                    </div>
-                </div>
-                <div class="age-text"><b>{html.escape(antiguedad_siguiente)}</b> · Motivo: {html.escape(', '.join(motivos))}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:
-        st.success("No tienes casos pendientes en este momento.")
+        with st.container(border=True):
+            c1, c2, c3 = st.columns([1.0, 1.45, 1.0], gap="large")
 
-    # --- Accesos directos desde Inicio -----------------------------------
-    # Los selectores de abiertos y cerrados son mutuamente excluyentes para
-    # mantener la página simple y evitar dos paneles largos al mismo tiempo.
-    if caso_siguiente is not None:
-        accion_sugerido, accion_abiertos, accion_cerrados = st.columns([1.15, 1, 1])
-        with accion_sugerido:
-            st.button(
-                "Abrir caso sugerido",
-                type="primary",
-                use_container_width=True,
-                key="inicio_abrir_siguiente",
-                on_click=ir_a_bandeja,
-                args=("Todos", int(caso_siguiente["id"])),
-            )
-    else:
-        accion_abiertos, accion_cerrados = st.columns([1, 1])
+            with c1:
+                st.caption("CASO ABIERTO MÁS ANTIGUO")
+                st.markdown(f"### {ticket_siguiente}")
+                st.markdown(f"**{cliente_siguiente}**")
+                st.caption(correo_siguiente)
 
-    with accion_abiertos:
-        st.button(
-            f"Bandeja de casos abiertos ({len(casos[casos['estado'] != 'CERRADO'])})",
-            use_container_width=True,
-            key="inicio_ir_bandeja_abiertos",
-            help="Abre la bandeja completa para buscar, filtrar y gestionar los casos abiertos.",
-            on_click=ir_a_bandeja,
-            args=("Todos",),
-        )
+            with c2:
+                st.caption("RECEPCIÓN")
+                st.markdown(f"**{fecha_siguiente}**")
+                st.caption(f"Antigüedad: {antiguedad_siguiente}")
+                st.markdown("**Asunto**")
+                st.write(asunto_siguiente)
 
-    with accion_cerrados:
-        if st.button(
-            f"Casos cerrados ({len(casos[casos['estado'] == 'CERRADO'])})",
-            use_container_width=True,
-            key="inicio_toggle_selector_cerrados",
-        ):
-            st.session_state["inicio_mostrar_selector_cerrados"] = True
-            st.session_state["inicio_mostrar_selector_casos"] = False
-            st.rerun()
+            with c3:
+                st.caption("SITUACIÓN")
+                st.markdown(f"**{categoria_siguiente} · {prioridad_siguiente}**")
+                st.write(f"Estado: {estado_siguiente}")
+                st.write(f"SLA: {sla_siguiente}")
+                st.caption(f"Ejecutivo: {ejecutivo_siguiente}")
 
-    # --- Selector de casos abiertos --------------------------------------
-    if st.session_state.get("inicio_mostrar_selector_casos", False):
-        st.markdown("### Elegir un caso abierto")
-        st.caption(
-            "Selecciona directamente cualquier caso abierto dentro de tu alcance. "
-            "El listado está ordenado desde el más reciente al más antiguo y puedes escribir para buscar por ticket, cliente, categoría o fecha."
-        )
-
-        casos_disponibles_inicio = casos[casos["estado"] != "CERRADO"].copy()
-        casos_disponibles_inicio = casos_disponibles_inicio.sort_values(
-            ["_fecha_recepcion_dt", "id"],
-            ascending=[False, False],
-            na_position="last",
-        )
-
-        if casos_disponibles_inicio.empty:
-            st.info("No hay casos abiertos disponibles en este momento.")
-        else:
-            opciones_inicio = {}
-            for _, fila in casos_disponibles_inicio.iterrows():
-                etiqueta = (
-                    f"{fila.get('Fecha recepción') or 'Sin fecha'} · "
-                    f"{fila.get('ticket_id') or 'SIN-TICKET'} · "
-                    f"{fila.get('nombre_cliente') or 'Cliente sin nombre'} · "
-                    f"{fila.get('categoria') or 'Sin categoría'} · "
-                    f"{fila.get('prioridad') or 'Sin prioridad'} · "
-                    f"{fila.get('Estado visible') or nombre_estado(fila.get('estado'))}"
-                )
-                opciones_inicio[etiqueta] = int(fila["id"])
-
-            seleccion_inicio = st.selectbox(
-                f"Casos abiertos disponibles ({len(opciones_inicio)})",
-                list(opciones_inicio.keys()),
-                key="inicio_selector_caso_trabajo",
-                help="Escribe dentro del selector para buscar por ticket, cliente, categoría o fecha.",
-            )
-
-            fila_seleccionada = casos_disponibles_inicio[
-                casos_disponibles_inicio["id"].astype(int) == opciones_inicio[seleccion_inicio]
-            ].iloc[0]
-
-            caso_abierto = obtener_caso_autorizado(opciones_inicio[seleccion_inicio])
-            if caso_abierto:
-                render_inicio_caso_detalle(caso_abierto, prefijo="inicio_abierto")
-
-            abrir_col, ocultar_col = st.columns([1.25, 0.75])
-            with abrir_col:
+            a1, a2, a3 = st.columns([1.2, 1, 1])
+            with a1:
                 st.button(
-                    "Trabajar este caso",
+                    "Abrir caso sugerido",
                     type="primary",
                     use_container_width=True,
-                    key="inicio_abrir_caso_elegido",
+                    key="inicio_abrir_siguiente",
                     on_click=ir_a_bandeja,
-                    args=("Todos", int(fila_seleccionada["id"])),
+                    args=("Todos", int(caso_siguiente["id"])),
                 )
-            with ocultar_col:
-                if st.button(
-                    "Ocultar casos abiertos",
+            with a2:
+                st.button(
+                    f"Ver pendientes ({len(abiertos)})",
                     use_container_width=True,
-                    key="inicio_ocultar_selector_casos",
-                ):
-                    st.session_state["inicio_mostrar_selector_casos"] = False
-                    st.rerun()
-
-    # --- Selector de casos cerrados --------------------------------------
-    if st.session_state.get("inicio_mostrar_selector_cerrados", False):
-        st.markdown("### Consultar un caso cerrado")
-        st.caption(
-            "Selecciona cualquier caso cerrado dentro de tu alcance. Puedes revisar sus antecedentes "
-            "completos y, si corresponde, reabrirlo para continuar la gestión."
-        )
-
-        casos_cerrados_inicio = casos[casos["estado"] == "CERRADO"].copy()
-        casos_cerrados_inicio = casos_cerrados_inicio.sort_values(
-            ["_fecha_recepcion_dt", "id"],
-            ascending=[False, False],
-            na_position="last",
-        )
-
-        if casos_cerrados_inicio.empty:
-            st.info("Todavía no hay casos cerrados dentro de tu alcance.")
-        else:
-            opciones_cerrados_inicio = {}
-            for _, fila in casos_cerrados_inicio.iterrows():
-                etiqueta = (
-                    f"{fila.get('Fecha recepción') or 'Sin fecha'} · "
-                    f"{fila.get('ticket_id') or 'SIN-TICKET'} · "
-                    f"{fila.get('nombre_cliente') or 'Cliente sin nombre'} · "
-                    f"{fila.get('categoria') or 'Sin categoría'} · "
-                    f"Cerrado: {fila.get('fecha_cierre') or 'Sin fecha de cierre'}"
+                    key="inicio_ver_pendientes",
+                    on_click=ir_a_bandeja,
+                    args=("Todos",),
                 )
-                opciones_cerrados_inicio[etiqueta] = int(fila["id"])
-
-            seleccion_cerrado_inicio = st.selectbox(
-                f"Casos cerrados disponibles ({len(opciones_cerrados_inicio)})",
-                list(opciones_cerrados_inicio.keys()),
-                key="inicio_selector_caso_cerrado",
-                help="Escribe dentro del selector para buscar por ticket, cliente, categoría o fecha.",
+            with a3:
+                st.button(
+                    f"Historial cerrado ({len(casos[casos['estado'] == 'CERRADO'])})",
+                    use_container_width=True,
+                    key="inicio_ver_cerrados",
+                    on_click=ir_a_historial,
+                )
+    else:
+        st.success("No tienes casos pendientes en este momento.")
+        if len(casos[casos["estado"] == "CERRADO"]) > 0:
+            st.button(
+                f"Ver historial cerrado ({len(casos[casos['estado'] == 'CERRADO'])})",
+                use_container_width=True,
+                key="inicio_ver_cerrados_sin_pendientes",
+                on_click=ir_a_historial,
             )
 
-            caso_cerrado_inicio = obtener_caso_autorizado(
-                opciones_cerrados_inicio[seleccion_cerrado_inicio]
-            )
-
-            if caso_cerrado_inicio:
-                st.markdown("#### Ficha del caso cerrado")
-                render_inicio_caso_detalle(caso_cerrado_inicio, prefijo="inicio_cerrado")
-
-                cierre_col, sla_col = st.columns(2)
-                cierre_col.info(
-                    f"Fecha de cierre: {caso_cerrado_inicio.get('fecha_cierre') or 'No disponible'}"
-                )
-                sla_col.info(
-                    f"SLA: {nombre_sla(calcular_estado_sla(caso_cerrado_inicio))}"
-                )
-
-                with st.expander("Gestión y evaluación registradas", expanded=False):
-                    st.markdown("**Gestión registrada**")
-                    st.write(caso_cerrado_inicio.get("nota_ejecutivo") or "Sin nota registrada.")
-
-                    st.markdown("**Comentario de evaluación**")
-                    st.write(caso_cerrado_inicio.get("comentario_feedback") or "Sin comentario registrado.")
-
-                with st.expander("Información técnica y trazabilidad", expanded=False):
-                    st.write(f"**Guardrail:** {construir_guardrail(caso_cerrado_inicio)}")
-                    conf = caso_cerrado_inicio.get("confianza_modelo")
-                    conf_txt = f"{float(conf):.2f}" if conf is not None else "No disponible"
-                    st.write(f"**Confianza estimada:** {conf_txt}")
-                    st.write(
-                        "**Revisión humana requerida:** "
-                        + ("Sí" if int(caso_cerrado_inicio.get("requiere_revision_humana") or 0) else "No")
-                    )
-                    st.write(
-                        "**Datos personales minimizados:** "
-                        + ("Sí" if int(caso_cerrado_inicio.get("pii_detectada") or 0) else "No")
-                    )
-
-                # Vista de auditoría completa: muestra todos los campos disponibles
-                # de la fila sin alterar la información almacenada.
-                with st.expander("Ver todos los campos registrados", expanded=False):
-                    auditoria = pd.DataFrame(
-                        [
-                            {"Campo": str(campo), "Valor": "" if valor is None else str(valor)}
-                            for campo, valor in caso_cerrado_inicio.items()
-                        ]
-                    )
-                    st.dataframe(auditoria, use_container_width=True, hide_index=True)
-
-                reabrir_col, ocultar_cerrados_col = st.columns([1, 1])
-                with reabrir_col:
-                    if st.button(
-                        "↩ Reabrir y trabajar este caso",
-                        type="primary",
-                        use_container_width=True,
-                        key=f"inicio_reabrir_cerrado_{caso_cerrado_inicio['id']}",
-                    ):
-                        actualizar_estado(caso_cerrado_inicio["id"], "EN_GESTION")
-                        st.session_state["inicio_mostrar_selector_cerrados"] = False
-                        ir_a_bandeja("Todos", int(caso_cerrado_inicio["id"]))
-                        st.rerun()
-
-                with ocultar_cerrados_col:
-                    if st.button(
-                        "Ocultar casos cerrados",
-                        use_container_width=True,
-                        key="inicio_ocultar_selector_cerrados",
-                    ):
-                        st.session_state["inicio_mostrar_selector_cerrados"] = False
-                        st.rerun()
-
-    # --- 4. Visión de carga / actividad -----------------------------------
+    # --- 3. Actividad y carga ---------------------------------------------
+    st.markdown("### Panorama operativo")
     c_actividad, c_carga = st.columns([1.25, 0.75], gap="large")
 
     with c_actividad:
-        st.markdown("### Actividad reciente")
+        st.markdown("#### Actividad reciente")
         recientes = casos.sort_values(
-            ["_fecha_recepcion_dt", "id"], ascending=[False, False], na_position="last"
+            ["_fecha_recepcion_dt", "id"],
+            ascending=[False, False],
+            na_position="last",
         ).head(8).copy()
         tabla_recientes = recientes.rename(columns={
             "ticket_id": "Ticket",
@@ -2352,7 +2174,9 @@ if pagina == "Inicio":
             "prioridad": "Prioridad",
             "Estado visible": "Estado",
         })
-        cols_recientes = ["Fecha recepción", "Ticket", "Cliente", "Categoría", "Prioridad", "Estado"]
+        cols_recientes = [
+            "Fecha recepción", "Ticket", "Cliente", "Categoría", "Prioridad", "Estado"
+        ]
         cols_recientes = [c for c in cols_recientes if c in tabla_recientes.columns]
         st.dataframe(
             tabla_recientes[cols_recientes],
@@ -2363,7 +2187,7 @@ if pagina == "Inicio":
 
     with c_carga:
         if usuario_sesion["rol"] == "ADMIN":
-            st.markdown("### Carga por ejecutivo")
+            st.markdown("#### Carga por ejecutivo")
             carga = (
                 abiertos["responsable_asignado"]
                 .fillna("Sin asignar")
@@ -2377,25 +2201,35 @@ if pagina == "Inicio":
             else:
                 carga = carga.sort_values("Pendientes", ascending=True)
                 fig_carga_inicio = px.bar(
-                    carga, x="Pendientes", y="Ejecutivo", orientation="h", text="Pendientes",
+                    carga,
+                    x="Pendientes",
+                    y="Ejecutivo",
+                    orientation="h",
+                    text="Pendientes",
                     title=None,
                 )
                 fig_carga_inicio.update_layout(
-                    height=max(230, 58 * len(carga)), margin=dict(l=8, r=18, t=10, b=20),
-                    xaxis_title="Casos pendientes", yaxis_title="", showlegend=False,
+                    height=max(230, 58 * len(carga)),
+                    margin=dict(l=8, r=18, t=10, b=20),
+                    xaxis_title="Casos pendientes",
+                    yaxis_title="",
+                    showlegend=False,
                 )
                 fig_carga_inicio.update_traces(textposition="outside", cliponaxis=False)
-                st.plotly_chart(fig_carga_inicio, use_container_width=True, config={"displayModeBar": False})
+                st.plotly_chart(
+                    fig_carga_inicio,
+                    use_container_width=True,
+                    config={"displayModeBar": False},
+                )
         else:
-            st.markdown("### Mi situación")
+            st.markdown("#### Mi situación")
             propios = abiertos.copy()
             en_gestion_propios = int((propios["estado"] == "EN_GESTION").sum())
             nuevos_propios = int((propios["estado"] == "NUEVO").sum())
-            st.metric("Nuevos", nuevos_propios, help="Casos asignados que aún no han iniciado gestión.")
-            st.metric("En gestión", en_gestion_propios, help="Casos que ya estás trabajando.")
-            st.metric("Fuera de plazo", len(vencidos), help="Casos propios con SLA vencido.")
+            st.metric("Nuevos", nuevos_propios)
+            st.metric("En gestión", en_gestion_propios)
+            st.metric("Fuera de plazo", len(vencidos))
 
-# ============================================================
 # PÁGINA: BANDEJA Y GESTIÓN
 # ============================================================
 elif pagina == "Bandeja y gestión":
@@ -2405,7 +2239,7 @@ elif pagina == "Bandeja y gestión":
 
     st.markdown("## Bandeja y gestión")
     st.markdown(
-        '<div class="section-note">Selecciona un ticket y completa su gestión guiada.</div>',
+        '<div class="section-note">Espacio operativo para buscar, filtrar, abrir y gestionar casos. Aquí se revisan correos, se registran decisiones HITL y se cierran o reabren tickets.</div>',
         unsafe_allow_html=True,
     )
 
@@ -2440,12 +2274,6 @@ elif pagina == "Bandeja y gestión":
         ascending=[False, False],
         na_position="last",
     )
-
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Casos activos", len(casos_activos), help="Casos que todavía requieren una acción o cierre administrativo.")
-    m2.metric("En gestión", len(casos_activos[casos_activos["estado"] == "EN_GESTION"]), help="Casos que ya tomó un ejecutivo.")
-    m3.metric("Críticos", len(casos_activos[casos_activos["prioridad"] == "CRITICA"]), help="Casos activos de prioridad crítica.")
-    m4.metric("Fuera de plazo", len(casos_activos[casos_activos["SLA_TECNICO"] == "VENCIDO"]), help="Casos activos que superaron el tiempo objetivo.")
 
     st.markdown("### Casos activos")
     st.caption("Selecciona un ticket a la izquierda. La gestión completa se realiza en el panel derecho.")
@@ -2589,7 +2417,11 @@ elif pagina == "Bandeja y gestión":
                 )
 
     st.divider()
-    with st.expander(f"Historial de casos cerrados ({len(casos_cerrados)})", expanded=False):
+    historial_expandido = bool(st.session_state.pop("_bandeja_historial_abierto", False))
+    with st.expander(
+        f"Historial de casos cerrados ({len(casos_cerrados)})",
+        expanded=historial_expandido,
+    ):
         if casos_cerrados.empty:
             st.info("Todavía no hay casos cerrados.")
         else:
