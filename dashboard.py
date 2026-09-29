@@ -326,6 +326,62 @@ st.markdown(
     }
     .home-action-title {font-weight:800; color:var(--app-text); margin-bottom:4px;}
     .home-action-copy {font-size:.86rem; color:var(--app-muted);}
+
+    .home-case-card {
+        background:#FFFFFF;
+        border:1px solid var(--app-border);
+        border-radius:18px;
+        padding:18px 20px;
+        margin:14px 0 14px 0;
+        box-shadow:0 6px 18px rgba(34,52,84,.045);
+    }
+    .home-case-head {
+        display:grid;
+        grid-template-columns: .9fr 1.25fr 1fr .8fr 1.2fr 1.15fr;
+        gap:12px;
+        align-items:start;
+    }
+    .home-case-cell {min-width:0;}
+    .home-case-label {
+        color:var(--app-muted);
+        font-size:.74rem;
+        font-weight:700;
+        text-transform:uppercase;
+        letter-spacing:.035em;
+        margin-bottom:4px;
+    }
+    .home-case-value {
+        color:var(--app-text);
+        font-size:1rem;
+        font-weight:800;
+        line-height:1.25;
+        overflow-wrap:anywhere;
+    }
+    .home-case-sub {
+        color:var(--app-muted);
+        font-size:.80rem;
+        line-height:1.35;
+        margin-top:3px;
+        overflow-wrap:anywhere;
+    }
+    .home-message-title {
+        font-size:.88rem;
+        font-weight:800;
+        color:var(--app-text);
+        margin-bottom:4px;
+    }
+    .home-message-meta {
+        color:var(--app-muted);
+        font-size:.78rem;
+        margin-bottom:7px;
+        line-height:1.35;
+    }
+    @media (max-width: 1150px) {
+        .home-case-head {grid-template-columns:1fr 1fr 1fr;}
+    }
+    @media (max-width: 760px) {
+        .home-case-head {grid-template-columns:1fr 1fr;}
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -1121,6 +1177,99 @@ def resumen_caso_compacto(caso):
         """,
         unsafe_allow_html=True,
     )
+
+
+def render_inicio_caso_detalle(caso, prefijo="inicio"):
+    """Vista compacta del caso para Inicio, con mensaje y respuesta visibles."""
+    ticket = caso.get("ticket_id") or f"ID {caso.get('id')}"
+    cliente = caso.get("nombre_cliente") or "Cliente sin nombre"
+    correo = extraer_email(caso.get("remitente")) or "Correo no disponible"
+    categoria = caso.get("categoria") or "Sin categoría"
+    prioridad = caso.get("prioridad") or "Sin prioridad"
+    estado = nombre_estado(caso.get("estado"))
+    ejecutivo = caso.get("responsable_asignado") or "Sin asignar"
+    fecha = caso.get("fecha_recepcion") or "Fecha no disponible"
+    asunto = caso.get("asunto") or "Sin asunto"
+    area = caso.get("area_derivada") or "Área no disponible"
+    mensaje = caso.get("cuerpo_original") or "Sin contenido almacenado."
+    respuesta = caso.get("respuesta_cliente_texto") or "No hay respuesta almacenada para este caso."
+    estado_respuesta = estado_envio_visible(
+        caso.get("estado_envio_cliente"), caso.get("respuesta_cliente_enviada")
+    )
+
+    st.markdown(
+        f"""
+        <div class="home-case-card">
+          <div class="home-case-head">
+            <div class="home-case-cell">
+              <div class="home-case-label">Ticket</div>
+              <div class="home-case-value">{_esc(ticket)}</div>
+              <div class="home-case-sub">{_esc(fecha)}</div>
+            </div>
+            <div class="home-case-cell">
+              <div class="home-case-label">Cliente</div>
+              <div class="home-case-value">{_esc(cliente)}</div>
+              <div class="home-case-sub">{_esc(correo)}</div>
+            </div>
+            <div class="home-case-cell">
+              <div class="home-case-label">Categoría</div>
+              <div class="home-case-value">{_esc(categoria)}</div>
+              <div class="home-case-sub">{_esc(asunto)}</div>
+            </div>
+            <div class="home-case-cell">
+              <div class="home-case-label">Prioridad</div>
+              <div class="home-case-value">{_esc(prioridad)}</div>
+              <div class="home-case-sub">SLA: {_esc(nombre_sla(calcular_estado_sla(caso)))}</div>
+            </div>
+            <div class="home-case-cell">
+              <div class="home-case-label">Estado</div>
+              <div class="home-case-value">{_esc(estado)}</div>
+              <div class="home-case-sub">{_esc(area)}</div>
+            </div>
+            <div class="home-case-cell">
+              <div class="home-case-label">Ejecutivo</div>
+              <div class="home-case-value">{_esc(ejecutivo)}</div>
+              <div class="home-case-sub">Respuesta: {_esc(estado_respuesta)}</div>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    col_cliente, col_respuesta = st.columns(2, gap="large")
+
+    with col_cliente:
+        with st.container(border=True):
+            st.markdown('<div class="home-message-title">Correo recibido del cliente</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="home-message-meta">De: {_esc(correo)} · Asunto: {_esc(asunto)} · Recibido: {_esc(fecha)}</div>',
+                unsafe_allow_html=True,
+            )
+            st.text_area(
+                "Mensaje recibido del cliente",
+                value=str(mensaje),
+                height=190,
+                disabled=True,
+                label_visibility="collapsed",
+                key=f"{prefijo}_mensaje_cliente_{caso.get('id')}",
+            )
+
+    with col_respuesta:
+        with st.container(border=True):
+            st.markdown('<div class="home-message-title">Respuesta enviada al cliente</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="home-message-meta">Estado de envío: {_esc(estado_respuesta)}</div>',
+                unsafe_allow_html=True,
+            )
+            st.text_area(
+                "Respuesta enviada al cliente",
+                value=str(respuesta),
+                height=190,
+                disabled=True,
+                label_visibility="collapsed",
+                key=f"{prefijo}_respuesta_cliente_{caso.get('id')}",
+            )
 
 
 def sugerencia_gestion(caso):
@@ -1995,22 +2144,11 @@ if pagina == "Inicio":
                 casos_disponibles_inicio["id"].astype(int) == opciones_inicio[seleccion_inicio]
             ].iloc[0]
 
-            s1, s2, s3, s4, s5 = st.columns([1.1, 1.5, 1, 0.9, 1.1])
-            s1.metric("Ticket", fila_seleccionada.get("ticket_id") or f"ID {fila_seleccionada.get('id')}")
-            s2.metric("Cliente", fila_seleccionada.get("nombre_cliente") or "Sin nombre")
-            s3.metric("Categoría", fila_seleccionada.get("categoria") or "Sin categoría")
-            s4.metric("Prioridad", fila_seleccionada.get("prioridad") or "Sin prioridad")
-            s5.metric("Estado", fila_seleccionada.get("Estado visible") or nombre_estado(fila_seleccionada.get("estado")))
-
             caso_abierto = obtener_caso_autorizado(opciones_inicio[seleccion_inicio])
             if caso_abierto:
-                with st.expander("Ver resumen antes de abrir", expanded=False):
-                    st.write(f"**Fecha de recepción:** {caso_abierto.get('fecha_recepcion') or 'No disponible'}")
-                    st.write(f"**Asunto:** {caso_abierto.get('asunto') or 'Sin asunto'}")
-                    st.write(f"**Ejecutivo:** {caso_abierto.get('responsable_asignado') or 'Sin asignar'}")
-                    st.write(f"**Área:** {caso_abierto.get('area_derivada') or 'No disponible'}")
+                render_inicio_caso_detalle(caso_abierto, prefijo="inicio_abierto")
 
-            abrir_col, ocultar_col = st.columns([1, 1])
+            abrir_col, ocultar_col = st.columns([1.25, 0.75])
             with abrir_col:
                 st.button(
                     "Trabajar este caso",
@@ -2071,51 +2209,24 @@ if pagina == "Inicio":
 
             if caso_cerrado_inicio:
                 st.markdown("#### Ficha del caso cerrado")
-                resumen_caso_compacto(caso_cerrado_inicio)
+                render_inicio_caso_detalle(caso_cerrado_inicio, prefijo="inicio_cerrado")
 
-                d1, d2, d3 = st.columns(3)
-                d1.metric("Recepción", caso_cerrado_inicio.get("fecha_recepcion") or "No disponible")
-                d2.metric("Cierre", caso_cerrado_inicio.get("fecha_cierre") or "No disponible")
-                d3.metric("SLA", nombre_sla(calcular_estado_sla(caso_cerrado_inicio)))
+                cierre_col, sla_col = st.columns(2)
+                cierre_col.info(
+                    f"Fecha de cierre: {caso_cerrado_inicio.get('fecha_cierre') or 'No disponible'}"
+                )
+                sla_col.info(
+                    f"SLA: {nombre_sla(calcular_estado_sla(caso_cerrado_inicio))}"
+                )
 
-                with st.expander("Ver antecedentes completos del caso", expanded=True):
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        st.write(f"**Ticket:** {caso_cerrado_inicio.get('ticket_id') or 'Sin ticket'}")
-                        st.write(f"**Cliente:** {caso_cerrado_inicio.get('nombre_cliente') or 'No disponible'}")
-                        st.write(f"**Correo:** {extraer_email(caso_cerrado_inicio.get('remitente'))}")
-                        st.write(f"**Asunto:** {caso_cerrado_inicio.get('asunto') or 'Sin asunto'}")
-                        st.write(f"**Categoría:** {caso_cerrado_inicio.get('categoria') or 'No disponible'}")
-                        st.write(f"**Prioridad:** {caso_cerrado_inicio.get('prioridad') or 'No disponible'}")
-                    with c2:
-                        st.write(f"**Área:** {caso_cerrado_inicio.get('area_derivada') or 'No disponible'}")
-                        st.write(f"**Ejecutivo:** {caso_cerrado_inicio.get('responsable_asignado') or 'No disponible'}")
-                        st.write(f"**Estado:** {nombre_estado(caso_cerrado_inicio.get('estado'))}")
-                        st.write(f"**Sentimiento:** {caso_cerrado_inicio.get('sentimiento') or 'No disponible'}")
-                        st.write(f"**Fecha recepción:** {caso_cerrado_inicio.get('fecha_recepcion') or 'No disponible'}")
-                        st.write(f"**Fecha cierre:** {caso_cerrado_inicio.get('fecha_cierre') or 'No disponible'}")
-
-                    st.markdown("**Mensaje original**")
-                    st.text_area(
-                        "Mensaje original del caso cerrado",
-                        value=caso_cerrado_inicio.get("cuerpo_original") or "Sin contenido almacenado.",
-                        height=180,
-                        disabled=True,
-                        label_visibility="collapsed",
-                        key=f"inicio_cerrado_mensaje_{caso_cerrado_inicio['id']}",
-                    )
-
+                with st.expander("Gestión y evaluación registradas", expanded=False):
                     st.markdown("**Gestión registrada**")
                     st.write(caso_cerrado_inicio.get("nota_ejecutivo") or "Sin nota registrada.")
 
                     st.markdown("**Comentario de evaluación**")
                     st.write(caso_cerrado_inicio.get("comentario_feedback") or "Sin comentario registrado.")
 
-                with st.expander("Ver respuesta y trazabilidad del agente", expanded=False):
-                    st.write(
-                        "**Respuesta enviada al cliente:** "
-                        + (caso_cerrado_inicio.get("respuesta_cliente_texto") or "No hay respuesta almacenada.")
-                    )
+                with st.expander("Información técnica y trazabilidad", expanded=False):
                     st.write(f"**Guardrail:** {construir_guardrail(caso_cerrado_inicio)}")
                     conf = caso_cerrado_inicio.get("confianza_modelo")
                     conf_txt = f"{float(conf):.2f}" if conf is not None else "No disponible"
