@@ -2133,7 +2133,7 @@ if pagina == "Inicio":
                 )
             with a2:
                 st.button(
-                    f"Ver pendientes ({len(abiertos)})",
+                    f"Pendientes · {len(abiertos)} casos que aún requieren gestión",
                     use_container_width=True,
                     key="inicio_ver_pendientes",
                     on_click=ir_a_bandeja,
@@ -2352,7 +2352,7 @@ elif pagina == "Bandeja y gestión":
                         break
 
             seleccion = st.selectbox(
-                "Abrir caso", etiquetas_opciones, index=indice_inicial,
+                "Seleccionar caso para gestionar", etiquetas_opciones, index=indice_inicial,
                 help="Selecciona un ticket para iniciar o continuar la gestión.",
                 key="abrir_activo_v90",
             )
