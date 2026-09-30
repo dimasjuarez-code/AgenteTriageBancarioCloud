@@ -523,12 +523,38 @@ st.markdown(
     [class*="st-key-kpi_nav_"] button {
         white-space:pre-line !important; text-align:left !important; justify-content:flex-start !important;
         min-height:118px !important; padding:16px 17px !important; border-radius:16px !important;
-        background:#FFFFFF !important; border:1px solid #DFE6F0 !important; color:#17233A !important;
-        box-shadow:0 4px 14px rgba(34,52,84,.045) !important; line-height:1.35 !important;
+        color:#17233A !important; box-shadow:0 4px 14px rgba(34,52,84,.045) !important; line-height:1.35 !important;
     }
     [class*="st-key-kpi_nav_"] button p {white-space:pre-line !important; text-align:left !important; width:100%;}
-    [class*="st-key-kpi_nav_"] button:hover {border-color:#9DB3DA !important; box-shadow:0 7px 18px rgba(34,52,84,.08) !important;}
-    [class*="st-key-kpi_nav_"] button:disabled {opacity:.55 !important;}
+    [class*="st-key-kpi_nav_"] button:hover {box-shadow:0 8px 20px rgba(34,52,84,.11) !important; transform:translateY(-1px);}
+    [class*="st-key-kpi_nav_"] button:disabled {opacity:.72 !important;}
+
+    /* Colores funcionales de Inicio */
+    .st-key-kpi_nav_pendientes button {
+        background:#EAF2FF !important; border:1px solid #9EC1FF !important; color:#173B7A !important;
+    }
+    .st-key-kpi_nav_criticos button {
+        background:#FDECEC !important; border:1px solid #F3A6A6 !important; color:#9B1C1C !important;
+    }
+    .st-key-kpi_nav_vencidos button {
+        background:#FFF4D8 !important; border:1px solid #F2CA72 !important; color:#805B00 !important;
+    }
+    .st-key-kpi_nav_hitl button {
+        background:#F2ECFF !important; border:1px solid #C9B4FF !important; color:#5B3AA8 !important;
+    }
+
+    /* Selector rápido, alineado junto a Pendientes */
+    .st-key-home_case_selector {
+        background:#E9F8F4 !important; border:1px solid #8FD8C6 !important; border-radius:16px !important;
+        min-height:118px !important; padding:13px 14px 10px 14px !important;
+        box-shadow:0 4px 14px rgba(34,52,84,.045) !important;
+    }
+    .st-key-home_case_selector [data-testid="stCaptionContainer"] p {
+        color:#087A66 !important; font-weight:800 !important; letter-spacing:.035em !important;
+    }
+    .st-key-home_case_selector [data-baseweb="select"] > div {
+        background:#FFFFFF !important; border-color:#69BEAA !important; min-height:48px !important;
+    }
     .priority-card {background:#FFFFFF;border:1px solid #DFE6F0;border-radius:16px;padding:17px 18px;margin:8px 0 12px 0;}
     .priority-head {display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;}
     .priority-ticket {font-size:1.12rem;font-weight:800;color:#17233A;}
@@ -2041,31 +2067,17 @@ if pagina == "Inicio":
     )
 
     # --- 1. Estado general -------------------------------------------------
-    # Los KPI sirven como accesos rápidos a la Bandeja con el filtro correcto.
-    h1, h2, h3, h4, h5 = st.columns(5)
+    # Pendientes y el selector rápido quedan juntos a la izquierda.
+    # Los demás KPI conservan acceso directo a la Bandeja con su filtro.
+    h1, h2, h3, h4, h5 = st.columns([1.05, 1.22, 1.0, 1.0, 1.05])
+
     with h1:
         kpi_navegable(
             "Pendientes", len(abiertos), "Casos que aún requieren gestión",
             "Todos", "pendientes", disabled=len(abiertos) == 0,
         )
+
     with h2:
-        kpi_navegable(
-            "Críticos", len(criticos), "Prioridad crítica",
-            "Críticos", "criticos", disabled=len(criticos) == 0,
-        )
-    with h3:
-        kpi_navegable(
-            "Fuera de plazo", len(vencidos), "SLA vencido",
-            "Fuera de plazo", "vencidos", disabled=len(vencidos) == 0,
-        )
-    with h4:
-        kpi_navegable(
-            "Revisión humana", len(revision_humana), "Validación HITL",
-            "Revisión humana", "hitl", disabled=len(revision_humana) == 0,
-        )
-    with h5:
-        # Selector rápido de casos pendientes. Reemplaza el KPI Guardrails en Inicio.
-        # Guardrails sigue disponible como filtro operativo dentro de Bandeja y gestión.
         casos_selector_inicio = abiertos.sort_values(
             ["_fecha_recepcion_dt", "id"],
             ascending=[False, False],
@@ -2088,14 +2100,14 @@ if pagina == "Inicio":
             if row_id is not None:
                 ir_a_bandeja("Todos", row_id)
 
-        with st.container(border=True):
+        with st.container(key="home_case_selector"):
             st.caption("ELEGIR CASO ABIERTO")
             st.selectbox(
                 "Seleccionar caso para gestionar",
                 list(opciones_selector_inicio.keys()),
                 index=None,
                 placeholder=(
-                    f"{len(opciones_selector_inicio)} pendientes · elegir caso"
+                    f"Elegir entre {len(opciones_selector_inicio)} pendientes"
                     if opciones_selector_inicio
                     else "Sin casos pendientes"
                 ),
@@ -2103,7 +2115,26 @@ if pagina == "Inicio":
                 help="Selecciona cualquier caso pendiente. Se abrirá directamente en Bandeja y gestión.",
                 disabled=not bool(opciones_selector_inicio),
                 on_change=_abrir_caso_selector_inicio,
+                label_visibility="collapsed",
             )
+
+    with h3:
+        kpi_navegable(
+            "Críticos", len(criticos), "Prioridad crítica",
+            "Críticos", "criticos", disabled=len(criticos) == 0,
+        )
+
+    with h4:
+        kpi_navegable(
+            "Fuera de plazo", len(vencidos), "SLA vencido",
+            "Fuera de plazo", "vencidos", disabled=len(vencidos) == 0,
+        )
+
+    with h5:
+        kpi_navegable(
+            "Revisión humana", len(revision_humana), "Validación HITL",
+            "Revisión humana", "hitl", disabled=len(revision_humana) == 0,
+        )
 
     # --- 2. Caso sugerido --------------------------------------------------
     st.markdown("### Caso sugerido")
