@@ -2103,7 +2103,7 @@ if pagina == "Inicio":
     # --- 1. Estado general -------------------------------------------------
     # Pendientes y el selector rápido quedan juntos a la izquierda.
     # Los demás KPI conservan acceso directo a la Bandeja con su filtro.
-    h1, h2, h3, h4, h5 = st.columns([0.95, 1.65, 0.85, 0.95, 1.0])
+    h1, h2, h3, h4, h5 = st.columns([0.82, 2.05, 0.72, 0.82, 0.92])
 
     with h1:
         kpi_navegable(
@@ -2128,15 +2128,9 @@ if pagina == "Inicio":
             )
             opciones_selector_inicio[etiqueta] = int(fila["id"])
 
-        def _abrir_caso_selector_inicio():
-            etiqueta = st.session_state.get("inicio_selector_rapido_caso")
-            row_id = opciones_selector_inicio.get(etiqueta)
-            if row_id is not None:
-                ir_a_bandeja("Todos", row_id)
-
         with st.container(key="home_case_selector"):
             st.caption("ELEGIR CASO ABIERTO")
-            st.selectbox(
+            seleccion_inicio = st.selectbox(
                 "Seleccionar caso para gestionar",
                 list(opciones_selector_inicio.keys()),
                 index=None,
@@ -2146,11 +2140,20 @@ if pagina == "Inicio":
                     else "Sin casos pendientes"
                 ),
                 key="inicio_selector_rapido_caso",
-                help="Selecciona cualquier caso pendiente. Se abrirá directamente en Bandeja y gestión.",
+                help=(
+                    "Selecciona un caso para previsualizarlo en Inicio. "
+                    "No se abrirá hasta que pulses el botón Abrir caso."
+                ),
                 disabled=not bool(opciones_selector_inicio),
-                on_change=_abrir_caso_selector_inicio,
                 label_visibility="collapsed",
             )
+
+        # La selección solo cambia la previsualización. NO navega a otra página.
+        caso_seleccionado_inicio_id = (
+            opciones_selector_inicio.get(seleccion_inicio)
+            if seleccion_inicio
+            else None
+        )
 
     with h3:
         kpi_navegable(
@@ -2170,14 +2173,10 @@ if pagina == "Inicio":
             "Revisión humana", "hitl", disabled=len(revision_humana) == 0,
         )
 
-    # --- 2. Caso sugerido --------------------------------------------------
-    st.markdown("### Caso sugerido")
-    st.caption(
-        "Se propone el caso abierto con la fecha de recepción más antigua para evitar que quede rezagado."
-    )
-
+    # --- 2. Caso sugerido / caso seleccionado -------------------------------
     candidatos = abiertos.copy()
     caso_siguiente = None
+    caso_fue_seleccionado = False
 
     if not candidatos.empty:
         candidatos = candidatos.sort_values(
@@ -2185,7 +2184,30 @@ if pagina == "Inicio":
             ascending=[True, True],
             na_position="last",
         )
+
+        # Por defecto se propone el caso abierto más antiguo.
         caso_siguiente = candidatos.iloc[0]
+
+        # Si el usuario eligió un caso en el selector, solo cambia la previsualización.
+        if caso_seleccionado_inicio_id is not None:
+            coincidencias = abiertos[
+                abiertos["id"].astype(int) == int(caso_seleccionado_inicio_id)
+            ]
+            if not coincidencias.empty:
+                caso_siguiente = coincidencias.iloc[0]
+                caso_fue_seleccionado = True
+
+        if caso_fue_seleccionado:
+            st.markdown("### Caso seleccionado")
+            st.caption(
+                "Revisa los antecedentes. El caso solo se abrirá en Bandeja y gestión "
+                "cuando pulses Abrir caso."
+            )
+        else:
+            st.markdown("### Caso sugerido")
+            st.caption(
+                "Se propone el caso abierto con la fecha de recepción más antigua para evitar que quede rezagado."
+            )
 
         ticket_siguiente = caso_siguiente.get("ticket_id") or f"ID {caso_siguiente.get('id')}"
         cliente_siguiente = caso_siguiente.get("nombre_cliente") or "Cliente sin nombre"
@@ -2222,7 +2244,11 @@ if pagina == "Inicio":
             c1, c2, c3 = st.columns([1.0, 1.45, 1.15], gap="large")
 
             with c1:
-                st.caption("CASO ABIERTO MÁS ANTIGUO")
+                st.caption(
+                    "CASO SELECCIONADO"
+                    if caso_fue_seleccionado
+                    else "CASO ABIERTO MÁS ANTIGUO"
+                )
                 st.markdown(f"### {ticket_siguiente}")
                 st.markdown(f"**{cliente_siguiente}**")
                 st.caption(correo_siguiente)
@@ -2249,7 +2275,9 @@ if pagina == "Inicio":
 
             if caso_siguiente.get("SLA_TECNICO") == "VENCIDO":
                 st.warning(
-                    "Este caso está fuera de plazo y además es el caso abierto más antiguo."
+                    "Este caso está fuera de plazo."
+                    if caso_fue_seleccionado
+                    else "Este caso está fuera de plazo y además es el caso abierto más antiguo."
                 )
             elif int(caso_siguiente.get("requiere_revision_humana") or 0) == 1:
                 st.warning(
@@ -2258,11 +2286,20 @@ if pagina == "Inicio":
 
             a1, a2, a3 = st.columns([1.2, 1, 1])
             with a1:
+                texto_boton_abrir = (
+                    "Abrir caso"
+                    if caso_fue_seleccionado
+                    else "Abrir caso sugerido"
+                )
                 st.button(
-                    "Abrir caso sugerido",
+                    texto_boton_abrir,
                     type="primary",
                     use_container_width=True,
-                    key="inicio_abrir_siguiente",
+                    key=(
+                        "inicio_abrir_seleccionado"
+                        if caso_fue_seleccionado
+                        else "inicio_abrir_siguiente"
+                    ),
                     on_click=ir_a_bandeja,
                     args=("Todos", int(caso_siguiente["id"])),
                 )
