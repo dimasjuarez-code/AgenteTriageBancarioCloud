@@ -400,6 +400,33 @@ st.markdown(
         font-size:.90rem;
         line-height:1.55;
     }
+
+    /* Correos y respuestas: contraste alto y fondo blanco real */
+    .home-message-card {
+        background:#FFFFFF !important;
+        color:#17233A !important;
+    }
+    .home-message-card * {
+        color:#17233A !important;
+    }
+    .home-message-body {
+        background:#FFFFFF !important;
+        color:#17233A !important;
+        -webkit-text-fill-color:#17233A !important;
+    }
+    div[data-testid="stTextArea"] textarea,
+    div[data-testid="stTextArea"] textarea:disabled {
+        background:#FFFFFF !important;
+        color:#17233A !important;
+        -webkit-text-fill-color:#17233A !important;
+        opacity:1 !important;
+        border:1px solid #D7E0EC !important;
+        box-shadow:none !important;
+    }
+    div[data-testid="stTextArea"] textarea:disabled {
+        cursor:default !important;
+    }
+
     .priority-contact {
         display:grid;
         grid-template-columns:repeat(3,minmax(0,1fr));
@@ -1757,7 +1784,14 @@ def mostrar_informacion_opcional(caso):
         c1.write(f"**Cliente:** {estado_cliente}")
         c2.write(f"**Ejecutivo:** {estado_ejecutivo}")
         st.markdown("**Respuesta enviada al cliente**")
-        st.write(caso.get("respuesta_cliente_texto") or "No hay respuesta almacenada.")
+        st.text_area(
+            "Respuesta enviada al cliente",
+            value=caso.get("respuesta_cliente_texto") or "No hay respuesta almacenada.",
+            height=180,
+            disabled=True,
+            label_visibility="collapsed",
+            key=f"respuesta_cliente_visible_{caso['id']}",
+        )
 
     with st.expander("▸ Ver información técnica del agente"):
         conf = caso.get("confianza_modelo")
@@ -2069,7 +2103,7 @@ if pagina == "Inicio":
     # --- 1. Estado general -------------------------------------------------
     # Pendientes y el selector rápido quedan juntos a la izquierda.
     # Los demás KPI conservan acceso directo a la Bandeja con su filtro.
-    h1, h2, h3, h4, h5 = st.columns([1.05, 1.22, 1.0, 1.0, 1.05])
+    h1, h2, h3, h4, h5 = st.columns([0.95, 1.65, 0.85, 0.95, 1.0])
 
     with h1:
         kpi_navegable(
@@ -2165,28 +2199,62 @@ if pagina == "Inicio":
         ejecutivo_siguiente = caso_siguiente.get("responsable_asignado") or "Sin asignar"
         antiguedad_siguiente = formatear_antiguedad(caso_siguiente.get("_fecha_recepcion_dt"))
 
+        # Datos útiles para decidir si abrir el caso sin entrar todavía a la bandeja.
+        estado_respuesta_siguiente = estado_envio_visible(
+            caso_siguiente.get("estado_envio_cliente"),
+            caso_siguiente.get("respuesta_cliente_enviada"),
+        )
+        guardrail_siguiente = construir_guardrail(caso_siguiente)
+        revision_siguiente = (
+            "Sí"
+            if int(caso_siguiente.get("requiere_revision_humana") or 0) == 1
+            else "No"
+        )
+        mensaje_siguiente = re.sub(
+            r"\s+",
+            " ",
+            str(caso_siguiente.get("cuerpo_original") or "Sin contenido almacenado."),
+        ).strip()
+        if len(mensaje_siguiente) > 260:
+            mensaje_siguiente = mensaje_siguiente[:257].rstrip() + "..."
+
         with st.container(border=True):
-            c1, c2, c3 = st.columns([1.0, 1.45, 1.0], gap="large")
+            c1, c2, c3 = st.columns([1.0, 1.45, 1.15], gap="large")
 
             with c1:
                 st.caption("CASO ABIERTO MÁS ANTIGUO")
                 st.markdown(f"### {ticket_siguiente}")
                 st.markdown(f"**{cliente_siguiente}**")
                 st.caption(correo_siguiente)
+                st.markdown("**Recibido**")
+                st.write(fecha_siguiente)
+                st.caption(f"Antigüedad: {antiguedad_siguiente}")
 
             with c2:
-                st.caption("RECEPCIÓN")
-                st.markdown(f"**{fecha_siguiente}**")
-                st.caption(f"Antigüedad: {antiguedad_siguiente}")
-                st.markdown("**Asunto**")
-                st.write(asunto_siguiente)
+                st.caption("MENSAJE DEL CLIENTE")
+                st.markdown(f"**{asunto_siguiente}**")
+                st.write(mensaje_siguiente)
+                st.caption(
+                    f"Categoría: {categoria_siguiente} · Prioridad: {prioridad_siguiente}"
+                )
 
             with c3:
-                st.caption("SITUACIÓN")
-                st.markdown(f"**{categoria_siguiente} · {prioridad_siguiente}**")
-                st.write(f"Estado: {estado_siguiente}")
-                st.write(f"SLA: {sla_siguiente}")
-                st.caption(f"Ejecutivo: {ejecutivo_siguiente}")
+                st.caption("GESTIÓN / ATENCIÓN")
+                st.write(f"**Estado:** {estado_siguiente}")
+                st.write(f"**SLA:** {sla_siguiente}")
+                st.write(f"**Ejecutivo:** {ejecutivo_siguiente}")
+                st.write(f"**Revisión humana:** {revision_siguiente}")
+                st.write(f"**Guardrail:** {guardrail_siguiente}")
+                st.write(f"**Respuesta cliente:** {estado_respuesta_siguiente}")
+
+            if caso_siguiente.get("SLA_TECNICO") == "VENCIDO":
+                st.warning(
+                    "Este caso está fuera de plazo y además es el caso abierto más antiguo."
+                )
+            elif int(caso_siguiente.get("requiere_revision_humana") or 0) == 1:
+                st.warning(
+                    "Este caso requiere revisión humana antes de completar su gestión."
+                )
 
             a1, a2, a3 = st.columns([1.2, 1, 1])
             with a1:
@@ -2200,7 +2268,7 @@ if pagina == "Inicio":
                 )
             with a2:
                 st.button(
-                    f"Pendientes · {len(abiertos)} casos que aún requieren gestión",
+                    f"Pendientes · {len(abiertos)} casos",
                     use_container_width=True,
                     key="inicio_ver_pendientes",
                     on_click=ir_a_bandeja,
